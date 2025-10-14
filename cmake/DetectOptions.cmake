@@ -196,6 +196,18 @@ if(mgard_FOUND)
  endif()
 endif()
 
+# CAESAR
+if(ADIOS2_USE_CAESAR STREQUAL AUTO)
+  find_package(caesar CONFIG QUIET)
+elseif(ADIOS2_USE_CAESAR)
+  find_package(caesar REQUIRED CONFIG)
+endif()
+if(caesar_FOUND)
+  set(ADIOS2_HAVE_CAESAR TRUE)
+else()
+  set(ADIOS2_HAVE_CAESAR FALSE)
+endif()
+
 # PNG
 if(ADIOS2_USE_PNG STREQUAL AUTO)
   find_package(PNG 1.6.0)
