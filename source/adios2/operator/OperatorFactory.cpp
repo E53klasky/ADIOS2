@@ -55,176 +55,187 @@
 #include "adios2/operator/compress/CompressZFP.h"
 #endif
 
+#ifdef ADIOS2_USE_CAESAR
+#include "adios2/operator/compress/CompressCAESAR.h"
+#endif
 namespace adios2
 {
-namespace core
-{
-
-std::string OperatorTypeToString(const Operator::OperatorType type)
-{
-    switch (type)
+    namespace core
     {
-    case Operator::COMPRESS_BIGWHOOP:
-        return "bigwhoop";
-    case Operator::COMPRESS_BLOSC:
-        return "blosc";
-    case Operator::COMPRESS_BZIP2:
-        return "bzip2";
-    case Operator::COMPRESS_LIBPRESSIO:
-        return "libpressio";
-    case Operator::COMPRESS_MGARD:
-        return "mgard";
-    case Operator::COMPRESS_MGARDPLUS:
-        return "mgardplus";
-    case Operator::COMPRESS_PNG:
-        return "png";
-    case Operator::COMPRESS_SIRIUS:
-        return "sirius";
-    case Operator::COMPRESS_SZ:
-        return "sz";
-    case Operator::COMPRESS_ZFP:
-        return "zfp";
-    case Operator::REFACTOR_MDR:
-        return "mdr";
-    case Operator::PLUGIN_INTERFACE:
-        return "plugin";
-    default:
-        return "null";
-    }
-}
 
-std::shared_ptr<Operator> MakeOperator(const std::string &type, const Params &parameters)
-{
-    std::shared_ptr<Operator> ret = nullptr;
+        std::string OperatorTypeToString(const Operator::OperatorType type)
+        {
+            switch (type)
+            {
+            case Operator::COMPRESS_BIGWHOOP:
+                return "bigwhoop";
+            case Operator::COMPRESS_BLOSC:
+                return "blosc";
+            case Operator::COMPRESS_BZIP2:
+                return "bzip2";
+            case Operator::COMPRESS_LIBPRESSIO:
+                return "libpressio";
+            case Operator::COMPRESS_MGARD:
+                return "mgard";
+            case Operator::COMPRESS_MGARDPLUS:
+                return "mgardplus";
+            case Operator::COMPRESS_PNG:
+                return "png";
+            case Operator::COMPRESS_SIRIUS:
+                return "sirius";
+            case Operator::COMPRESS_SZ:
+                return "sz";
+            case Operator::COMPRESS_ZFP:
+                return "zfp";
+            case Operator::REFACTOR_MDR:
+                return "mdr";
+            case Operator::PLUGIN_INTERFACE:
+                return "plugin";
+            case Operator::COMPRESS_CAESAR:
+                return "caesar";
+            default:
+                return "null";
+            }
+        }
 
-    const std::string typeLowerCase = helper::LowerCase(type);
+        std::shared_ptr<Operator> MakeOperator(const std::string& type , const Params& parameters)
+        {
+            std::shared_ptr<Operator> ret = nullptr;
 
-    if (typeLowerCase == "bigwhoop")
-    {
+            const std::string typeLowerCase = helper::LowerCase(type);
+
+            if (typeLowerCase == "caesar")
+            {
+#ifdef ADIOS2_USE_CAESAR
+                ret = std::make_shared<compress::CompressCAESAR>(parameters);
+#endif
+            }
+            if (typeLowerCase == "bigwhoop")
+            {
 #ifdef ADIOS2_HAVE_BIGWHOOP
-        ret = std::make_shared<compress::CompressBigWhoop>(parameters);
+                ret = std::make_shared<compress::CompressBigWhoop>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "blosc")
-    {
+            }
+            else if (typeLowerCase == "blosc")
+            {
 #ifdef ADIOS2_HAVE_BLOSC2
-        ret = std::make_shared<compress::CompressBlosc>(parameters);
+                ret = std::make_shared<compress::CompressBlosc>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "bzip2")
-    {
+            }
+            else if (typeLowerCase == "bzip2")
+            {
 #ifdef ADIOS2_HAVE_BZIP2
-        ret = std::make_shared<compress::CompressBZIP2>(parameters);
+                ret = std::make_shared<compress::CompressBZIP2>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "libpressio")
-    {
+            }
+            else if (typeLowerCase == "libpressio")
+            {
 #ifdef ADIOS2_HAVE_LIBPRESSIO
-        ret = std::make_shared<compress::CompressLibPressio>(parameters);
+                ret = std::make_shared<compress::CompressLibPressio>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "mgard")
-    {
+            }
+            else if (typeLowerCase == "mgard")
+            {
 #ifdef ADIOS2_HAVE_MGARD
-        ret = std::make_shared<compress::CompressMGARD>(parameters);
+                ret = std::make_shared<compress::CompressMGARD>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "mgardplus")
-    {
+            }
+            else if (typeLowerCase == "mgardplus")
+            {
 #ifdef ADIOS2_HAVE_MGARD
-        ret = std::make_shared<compress::CompressMGARDPlus>(parameters);
+                ret = std::make_shared<compress::CompressMGARDPlus>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "png")
-    {
+            }
+            else if (typeLowerCase == "png")
+            {
 #ifdef ADIOS2_HAVE_PNG
-        ret = std::make_shared<compress::CompressPNG>(parameters);
+                ret = std::make_shared<compress::CompressPNG>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "sirius")
-    {
+            }
+            else if (typeLowerCase == "sirius")
+            {
 #ifdef ADIOS2_HAVE_MHS
-        ret = std::make_shared<compress::CompressSirius>(parameters);
+                ret = std::make_shared<compress::CompressSirius>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "sz")
-    {
+            }
+            else if (typeLowerCase == "sz")
+            {
 #ifdef ADIOS2_HAVE_SZ
-        ret = std::make_shared<compress::CompressSZ>(parameters);
+                ret = std::make_shared<compress::CompressSZ>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "zfp")
-    {
+            }
+            else if (typeLowerCase == "zfp")
+            {
 #ifdef ADIOS2_HAVE_ZFP
-        ret = std::make_shared<compress::CompressZFP>(parameters);
+                ret = std::make_shared<compress::CompressZFP>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "mdr")
-    {
+            }
+            else if (typeLowerCase == "mdr")
+            {
 #ifdef ADIOS2_HAVE_MGARD_MDR
-        ret = std::make_shared<refactor::RefactorMDR>(parameters);
+                ret = std::make_shared<refactor::RefactorMDR>(parameters);
 #endif
-    }
-    else if (typeLowerCase == "plugin")
-    {
-        ret = std::make_shared<plugin::PluginOperator>(parameters);
-    }
-    else if (typeLowerCase == "null")
-    {
-        ret = std::make_shared<compress::CompressNull>(parameters);
-    }
-    else
-    {
-        helper::Throw<std::invalid_argument>("Operator", "OperatorFactory", "MakeOperator",
-                                             "ADIOS2 does not support " + typeLowerCase +
-                                                 " operation");
-    }
+            }
+            else if (typeLowerCase == "plugin")
+            {
+                ret = std::make_shared<plugin::PluginOperator>(parameters);
+            }
+            else if (typeLowerCase == "null")
+            {
+                ret = std::make_shared<compress::CompressNull>(parameters);
+            }
+            else
+            {
+                helper::Throw<std::invalid_argument>("Operator" , "OperatorFactory" , "MakeOperator" ,
+                    "ADIOS2 does not support " + typeLowerCase +
+                    " operation");
+            }
 
-    if (ret == nullptr)
-    {
-        auto m = MakeMessage("Operator", "OperatorFactory", "MakeOperator",
-                             "ADIOS2 didn't compile with " + typeLowerCase +
-                                 " library, operator not added",
-                             -1, helper::LogMode::EXCEPTION);
-        throw MissingOperatorFailure(m, typeLowerCase);
-    }
+            if (ret == nullptr)
+            {
+                auto m = MakeMessage("Operator" , "OperatorFactory" , "MakeOperator" ,
+                    "ADIOS2 didn't compile with " + typeLowerCase +
+                    " library, operator not added" ,
+                    -1 , helper::LogMode::EXCEPTION);
+                throw MissingOperatorFailure(m , typeLowerCase);
+            }
 
-    return ret;
-}
+            return ret;
+        }
 
-size_t Decompress(const char *bufferIn, const size_t sizeIn, char *dataOut, MemorySpace memSpace,
-                  std::shared_ptr<Operator> op, Engine *engine, VariableBase *var)
-{
-    Operator::OperatorType compressorType;
-    std::memcpy(&compressorType, bufferIn, 1);
-    if (op == nullptr || op->m_TypeEnum != compressorType)
-    {
-        op = MakeOperator(OperatorTypeToString(compressorType), {});
-    }
+        size_t Decompress(const char* bufferIn , const size_t sizeIn , char* dataOut , MemorySpace memSpace ,
+            std::shared_ptr<Operator> op , Engine* engine , VariableBase* var)
+        {
+            Operator::OperatorType compressorType;
+            std::memcpy(&compressorType , bufferIn , 1);
+            if (op == nullptr || op->m_TypeEnum != compressorType)
+            {
+                op = MakeOperator(OperatorTypeToString(compressorType) , {});
+            }
 
-    if (engine && var)
-    {
-        Params operatorParams = CreateOperatorParams(engine, var);
-        op->AddExtraParameters(operatorParams);
-    }
+            if (engine && var)
+            {
+                Params operatorParams = CreateOperatorParams(engine , var);
+                op->AddExtraParameters(operatorParams);
+            }
 
-    size_t sizeOut = op->InverseOperate(bufferIn, sizeIn, dataOut);
+            size_t sizeOut = op->InverseOperate(bufferIn , sizeIn , dataOut);
 
-    if (sizeOut == 0) // the inverse operator was not applied
-    {
-        size_t headerSize = op->GetHeaderSize();
-        sizeOut = sizeIn - headerSize;
-        helper::CopyContiguousMemory(bufferIn + headerSize, sizeOut, dataOut,
-                                     /*endianReverse*/ false, memSpace);
-    }
-    return sizeOut;
-}
+            if (sizeOut == 0) // the inverse operator was not applied
+            {
+                size_t headerSize = op->GetHeaderSize();
+                sizeOut = sizeIn - headerSize;
+                helper::CopyContiguousMemory(bufferIn + headerSize , sizeOut , dataOut ,
+                    /*endianReverse*/ false , memSpace);
+            }
+            return sizeOut;
+        }
 
-Params CreateOperatorParams(const Engine *engine, const VariableBase *variable)
-{
-    Params p = {{"EngineName", engine->m_Name}, {"VariableName", variable->m_Name}};
-    return p;
-}
+        Params CreateOperatorParams(const Engine* engine , const VariableBase* variable)
+        {
+            Params p = { {"EngineName", engine->m_Name}, {"VariableName", variable->m_Name} };
+            return p;
+        }
 
-} // end namespace core
+    } // end namespace core
 } // end namespace adios2
