@@ -525,7 +525,7 @@ namespace adios2
         namespace caesar {
             namespace key {
                 constexpr char batch_size[] = "batch_size";
-                constexpr char tolerance[] = "tolerance";
+                constexpr char tolerance[] = "error_bound";
                 constexpr char mode[] = "model";
             }
         }
