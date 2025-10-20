@@ -39,7 +39,9 @@ namespace adios2
      * @param dataOut : decompressed data buffer
      * @return : number of bytes in dataOut
      */
-                size_t DecompressV1(const char* bufferIn , const size_t sizeIn , char* dataOut); // idk what this is
+                size_t DecompressV1(const char* bufferIn , const size_t sizeIn , char* dataOut);
+                std::string Detect_device();
+
                 std::string m_VersionInfo; // this is the model
             };
 
