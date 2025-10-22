@@ -105,7 +105,7 @@ namespace adios2
             std::shared_ptr<Operator> ret = nullptr;
 
             const std::string typeLowerCase = helper::LowerCase(type);
-            std::cout << "Making operator of type: " << typeLowerCase << std::endl;
+
             if (typeLowerCase == "caesar")
             {
 #ifdef ADIOS2_HAVE_CAESAR  

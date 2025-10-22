@@ -197,17 +197,17 @@ if(mgard_FOUND)
 endif()
 
 # CAESAR 
-# note to do make logic btter for pytorch detection
+# note to do make logic better for pytorch detection
+set(ADIOS2_HAVE_CAESAR FALSE)
 if(ADIOS2_USE_CAESAR STREQUAL AUTO)
-  find_package(caesar CONFIG QUIET)
+  find_package(CAESAR CONFIG QUIET)
 elseif(ADIOS2_USE_CAESAR)
-  find_package(caesar REQUIRED CONFIG)
+  find_package(CAESAR REQUIRED CONFIG)
 endif()
-if(caesar_FOUND)
+
+if(CAESAR_FOUND)
   find_package(Torch REQUIRED QUIET)
   set(ADIOS2_HAVE_CAESAR TRUE)
-else()
-  set(ADIOS2_HAVE_CAESAR FALSE)
 endif()
 
 # PNG
