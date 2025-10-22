@@ -56,7 +56,7 @@
 #include "adios2/operator/compress/CompressZFP.h"
 #endif
 
-#ifdef ADIOS2_USE_CAESAR
+#ifdef  ADIOS2_HAVE_CAESAR
 #include "adios2/operator/compress/CompressCAESAR.h"
 #endif
 namespace adios2
@@ -105,14 +105,14 @@ namespace adios2
             std::shared_ptr<Operator> ret = nullptr;
 
             const std::string typeLowerCase = helper::LowerCase(type);
-
+            std::cout << "Making operator of type: " << typeLowerCase << std::endl;
             if (typeLowerCase == "caesar")
             {
-#ifdef ADIOS2_USE_CAESAR
+#ifdef ADIOS2_HAVE_CAESAR  
                 ret = std::make_shared<compress::CompressCAESAR>(parameters);
 #endif
             }
-            if (typeLowerCase == "bigwhoop")
+            else if (typeLowerCase == "bigwhoop")
             {
 #ifdef ADIOS2_HAVE_BIGWHOOP
                 ret = std::make_shared<compress::CompressBigWhoop>(parameters);

@@ -37,14 +37,14 @@ namespace adios2
                 COMPRESS_ZFP = 7 ,
                 COMPRESS_MGARDPLUS = 8 ,
                 COMPRESS_BIGWHOOP = 9 ,
-                COMPRESS_MGARDCOMPLEX = 10,
-                COMPRESS_CAESAR = 11,
+                COMPRESS_MGARDCOMPLEX = 10 ,
+                COMPRESS_CAESAR = 11 ,
                 REFACTOR_MDR = 41 ,
                 CALLBACK_SIGNATURE1 = 51 ,
                 CALLBACK_SIGNATURE2 = 52 ,
                 PLUGIN_INTERFACE = 53 ,
                 COMPRESS_NULL = 127 ,
-               
+
             };
 
             const std::string m_TypeString;
