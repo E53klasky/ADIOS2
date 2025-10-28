@@ -1,7 +1,9 @@
 #include "CompressCAESAR.h"
 #include "adios2/helper/adiosFunctions.h"
-#include "models/compress/compressor.h"
+#include "models/caesar_compress.h"
+#include "models/caesar_decompress.h"
 #include "dataset/dataset.h"
+#include <cstring>
 
 namespace adios2
 {
@@ -9,8 +11,9 @@ namespace adios2
     {
         namespace compress
         {
+            // add amd support later --- ONCE GAE HAS IT
             std::string DetectDevice()
-            {   // TODO: add ROCm support
+            {
                 if (torch::cuda::is_available()) {
                     return "cuda";
                 }
@@ -37,62 +40,52 @@ namespace adios2
                 }
                 PutParameter(bufferOut , bufferOutOffset , type);
 
-                // doing and saving magic above idk what is goind on hope it works aove
-
-                // for now ----------------------
                 if (ndims != 3 && ndims != 4) {
                     helper::Throw<std::invalid_argument>("Operator" , "CompressCAESAR" , "Operate" ,
                         "CAESAR only supports 3D and 4D data, got " + std::to_string(ndims) + " dimensions");
                 }
 
-                // Validate n_frame requirement (first dimension must be >= 8) for now -----------------
+                // MAYBE this should be within CAESAR in the dataset??????
                 if (blockCount[0] < 8) {
-                    std::cerr << "ERROR: CAESAR requires first dimension >= 8, got " << blockCount[0] << std::endl;
-                    std::cerr << "Block dimensions: [";
-                    for (size_t i = 0; i < ndims; i++) {
-                        std::cerr << blockCount[i];
-                        if (i < ndims - 1) std::cerr << ", ";
-                    }
-                    std::cerr << "]" << std::endl;
                     helper::Throw<std::invalid_argument>("Operator" , "CompressCAESAR" , "Operate" ,
-                        "First dimension must be >= 8 for CAESAR compression");
+                        "First dimension must be >= 8 for CAESAR compression, got " + std::to_string(blockCount[0]));
                 }
 
-                PutParameter(bufferOut , bufferOutOffset , true); // idk --------------
+                // Check if compression idk also need to add the 128x128 for the spatial dims to not compress
+                size_t thresholdSize = 1 * 1024 * 1024; // 1MB threshold
+                size_t totalSize = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
+                if (totalSize < thresholdSize) {
+                    PutParameter(bufferOut , bufferOutOffset , false);
+                    return bufferOutOffset;
+                }
+
 
                 torch::Tensor data_tensor;
+                std::vector<int64_t> sizes;
+                for (const auto& d : blockCount) {
+                    sizes.push_back(static_cast<int64_t>(d));
+                }
 
                 if (type == DataType::Float) {
-                    std::vector<int64_t> sizes;
-                    for (const auto& d : blockCount) {
-                        sizes.push_back(static_cast<int64_t>(d));
-                    }
-                    data_tensor = torch::from_blob(const_cast<char*>(dataIn) , sizes , torch::kFloat32);
+                    data_tensor = torch::from_blob(const_cast<char*>(dataIn) , sizes , torch::kFloat32).clone();
                 }
                 else if (type == DataType::Double) {
-                    std::vector<int64_t> sizes;
-                    for (const auto& d : blockCount) {
-                        sizes.push_back(static_cast<int64_t>(d));
-                    }
-                    data_tensor = torch::from_blob(const_cast<char*>(dataIn) , sizes , torch::kFloat64).to(torch::kFloat32);
+                    data_tensor = torch::from_blob(const_cast<char*>(dataIn) , sizes , torch::kFloat64)
+                        .to(torch::kFloat32).clone();
                 }
                 else {
                     helper::Throw<std::invalid_argument>("Operator" , "CompressCAESAR" , "Operate" ,
                         "Unsupported data type");
                 }
 
-                data_tensor = data_tensor.clone(); // Make a copy to own the memory
-
-                // Reshape to 5D by adding dummy dimensions
                 torch::Tensor data_5d;
                 if (ndims == 3) {
                     data_5d = data_tensor.unsqueeze(0).unsqueeze(0);
                 }
-                else { // ndims == 4
+                else {
                     data_5d = data_tensor.unsqueeze(0);
                 }
 
-                // Setup DatasetConfig
                 DatasetConfig config;
                 config.memory_data = data_5d;
                 config.n_frame = static_cast<int>(blockCount[0]);
@@ -103,86 +96,46 @@ namespace adios2
                 config.norm_type = "mean_range";
                 config.n_overlap = 0;
 
+                // Get batch size from parameters or use default default to 32
+                int batch_size = 32;
+                auto itBatchSize = m_Parameters.find("batch_size");
+                if (itBatchSize != m_Parameters.end()) {
+                    batch_size = std::stoi(itBatchSize->second);
+                }
 
+                // Add better logic for amd once we get it 
                 std::string device_str = DetectDevice();
                 auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
                 Compressor compressor(device);
-
-                int batch_size = 32; // TODO: Make configurable (32 CPU, 64 GPU) or something for better performance
                 CompressionResult result = compressor.compress(config , batch_size);
 
-                // IDK magic below hope it works ----------------------
+                PutParameter(bufferOut , bufferOutOffset , true);
+
+                // Write compression metadata
                 PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.num_samples));
                 PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.num_batches));
 
-
-                size_t metadata_offset_pos = bufferOutOffset;
-                PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(0)); // Placeholder
-
-                // Write tensor data first (like data.bin)
-                size_t tensor_data_start = bufferOutOffset;
-                uint64_t current_offset = 0;
-
-                std::vector<std::tuple<std::string , uint64_t , uint64_t , std::vector<int64_t>>> metadata_records;
-
-                auto append_tensor = [&](const std::string& name , const torch::Tensor& tensor) {
-                    torch::Tensor cpu_tensor = tensor.to(torch::kCPU).contiguous();
-                    size_t num_bytes = cpu_tensor.numel() * sizeof(float);
-
-                    // Write tensor data
-                    std::memcpy(bufferOut + bufferOutOffset ,
-                        cpu_tensor.data_ptr<float>() ,
-                        num_bytes);
-
-                    // Store metadata record below
-                    std::vector<int64_t> shape = cpu_tensor.sizes().vec();
-                    metadata_records.push_back({ name, current_offset, num_bytes, shape });
-
-                    bufferOutOffset += num_bytes;
-                    current_offset += num_bytes;
-                    };
-
-                for (size_t i = 0; i < result.num_samples; i++) {
-                    append_tensor("latent_" + std::to_string(i) , result.latents[i]);
-                    append_tensor("hyper_latent_" + std::to_string(i) , result.hyper_latents[i]);
-                    append_tensor("offset_" + std::to_string(i) , result.offsets[i]);
-                    append_tensor("scale_" + std::to_string(i) , result.scales[i]);
+                // Write encoded streams sizes first
+                PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.encoded_latents.size()));
+                for (const auto& stream : result.encoded_latents) {
+                    PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(stream.size()));
                 }
 
-                // Write indices
-                for (size_t i = 0; i < result.num_samples; i++) {
-                    auto& idx = result.indices[i];
-                    for (int j = 0; j < 4; j++) {
-                        int64_t val = idx[j].item<int64_t>();
-                        PutParameter(bufferOut , bufferOutOffset , val);
-                    }
+                PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.encoded_hyper_latents.size()));
+                for (const auto& stream : result.encoded_hyper_latents) {
+                    PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(stream.size()));
                 }
 
-                // Now write metadata section (like meta.bin)
-                size_t metadata_section_start = bufferOutOffset;
+                // Write encoded latent streams
+                for (const auto& stream : result.encoded_latents) {
+                    std::memcpy(bufferOut + bufferOutOffset , stream.data() , stream.size());
+                    bufferOutOffset += stream.size();
+                }
 
-                // Update metadata offset placeholder
-                uint64_t metadata_offset_value = metadata_section_start - tensor_data_start;
-                std::memcpy(bufferOut + metadata_offset_pos , &metadata_offset_value , sizeof(uint64_t));
-
-                // Write metadata
-                uint32_t num_tensors = result.num_samples * 4; // latent, hyper_latent, offset, scale per sample
-                PutParameter(bufferOut , bufferOutOffset , num_tensors);
-
-                for (const auto& [name , offset , num_bytes , shape] : metadata_records) {
-                    uint32_t name_len = name.size();
-                    PutParameter(bufferOut , bufferOutOffset , name_len);
-                    std::memcpy(bufferOut + bufferOutOffset , name.c_str() , name_len);
-                    bufferOutOffset += name_len;
-
-                    PutParameter(bufferOut , bufferOutOffset , offset);
-                    PutParameter(bufferOut , bufferOutOffset , num_bytes);
-
-                    uint32_t ndim = shape.size();
-                    PutParameter(bufferOut , bufferOutOffset , ndim);
-                    for (auto d : shape) {
-                        PutParameter(bufferOut , bufferOutOffset , d);
-                    }
+                // Write encoded hyper-latent streams
+                for (const auto& stream : result.encoded_hyper_latents) {
+                    std::memcpy(bufferOut + bufferOutOffset , stream.data() , stream.size());
+                    bufferOutOffset += stream.size();
                 }
 
                 return bufferOutOffset;
@@ -209,7 +162,6 @@ namespace adios2
 
             bool CompressCAESAR::IsDataTypeValid(const DataType type) const
             {
-                // NOTE: Float and Double are confirmed to work but see if others can be added
                 if (type == DataType::Double || type == DataType::Float)
                 {
                     return true;
@@ -230,14 +182,99 @@ namespace adios2
                 }
                 const DataType type = GetParameter<DataType>(bufferIn , bufferInOffset);
 
-                m_VersionInfo = "CAESAR decompression is currently under development. "
-                    "Compressed data can be stored but decompression is not yet available. "
-                    "Please check back in future releases for decompression support.";
+                const bool isCompressed = GetParameter<bool>(bufferIn , bufferInOffset);
 
-                helper::Throw<std::runtime_error>("Operator" , "CompressCAESAR" , "DecompressV1" ,
-                    m_VersionInfo);
+                size_t sizeOut = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
 
-                return 0;
+                if (!isCompressed)
+                {
+                    return 0;
+                }
+
+                // Read compression metadata
+                uint64_t num_samples = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+                uint64_t num_batches = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+
+                // Read encoded stream sizes
+                uint64_t num_latent_streams = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+                std::vector<uint64_t> latent_sizes(num_latent_streams);
+                for (auto& size : latent_sizes) {
+                    size = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+                }
+
+                uint64_t num_hyper_latent_streams = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+                std::vector<uint64_t> hyper_latent_sizes(num_hyper_latent_streams);
+                for (auto& size : hyper_latent_sizes) {
+                    size = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+                }
+
+                // Read encoded latent streams
+                std::vector<std::string> encoded_latents;
+                for (auto size : latent_sizes) {
+                    encoded_latents.emplace_back(bufferIn + bufferInOffset , size);
+                    bufferInOffset += size;
+                }
+
+                // Read encoded hyper-latent streams
+                std::vector<std::string> encoded_hyper_latents;
+                for (auto size : hyper_latent_sizes) {
+                    encoded_hyper_latents.emplace_back(bufferIn + bufferInOffset , size);
+                    bufferInOffset += size;
+                }
+
+                std::string device_str = DetectDevice();
+                auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
+
+                int batch_size = 32;
+                auto itBatchSize = m_Parameters.find("batch_size");
+                if (itBatchSize != m_Parameters.end()) {
+                    batch_size = std::stoi(itBatchSize->second);
+                }
+
+                Decompressor decompressor(device);
+                int n_frame = static_cast<int>(blockCount[0]);
+
+                DecompressionResult result = decompressor.decompress(
+                    encoded_latents ,
+                    encoded_hyper_latents ,
+                    batch_size ,
+                    n_frame
+                );
+
+                // Reassemble the decompressed data
+                // The result contains multiple samples that need to be concatenated
+                if (result.reconstructed_data.empty()) {
+                    helper::Throw<std::runtime_error>("Operator" , "CompressCAESAR" , "DecompressV1" ,
+                        "Decompression returned no data");
+                }
+
+                // Concatenate all reconstructed samples
+                torch::Tensor reconstructed;
+                if (result.reconstructed_data.size() == 1) {
+                    reconstructed = result.reconstructed_data[0];
+                }
+                else {
+                    reconstructed = torch::cat(result.reconstructed_data , 0);
+                }
+
+                // Remove dummy dimensions to match original shape
+                while (reconstructed.dim() > static_cast<int64_t>(ndims)) {
+                    reconstructed = reconstructed.squeeze(0);
+                }
+
+                // Convert to CPU and contiguous need better logic for gpu also ask question it
+                reconstructed = reconstructed.to(torch::kCPU).contiguous();
+
+                // Copy to output buffer
+                if (type == DataType::Float) {
+                    std::memcpy(dataOut , reconstructed.data_ptr<float>() , sizeOut);
+                }
+                else if (type == DataType::Double) {
+                    torch::Tensor double_tensor = reconstructed.to(torch::kFloat64);
+                    std::memcpy(dataOut , double_tensor.data_ptr<double>() , sizeOut);
+                }
+
+                return sizeOut;
             }
 
         } // end namespace compress
