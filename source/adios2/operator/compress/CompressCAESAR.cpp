@@ -52,7 +52,7 @@ namespace adios2
                 }
 
                 // Check if compression idk also need to add the 128x128 for the spatial dims to not compress
-                size_t thresholdSize = 1 * 1024 * 1024; // 1MB threshold
+                size_t thresholdSize = 1 * 1024 * 1024; // 1MB thresholdz
                 size_t totalSize = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
                 if (totalSize < thresholdSize) {
                     PutParameter(bufferOut , bufferOutOffset , false);
@@ -88,7 +88,7 @@ namespace adios2
 
                 DatasetConfig config;
                 config.memory_data = data_5d;
-                config.n_frame = static_cast<int>(blockCount[0]);
+                config.n_frame = 8;
                 config.dataset_name = "ADIOS2_Block";
                 config.variable_idx = 0;
                 config.train_mode = false;
@@ -232,13 +232,13 @@ namespace adios2
                 }
 
                 Decompressor decompressor(device);
-                int n_frame = static_cast<int>(blockCount[0]);
+
 
                 DecompressionResult result = decompressor.decompress(
                     encoded_latents ,
                     encoded_hyper_latents ,
                     batch_size ,
-                    n_frame
+                    8
                 );
 
                 // Reassemble the decompressed data
