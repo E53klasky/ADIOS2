@@ -240,6 +240,7 @@ namespace adios2
                     batch_size ,
                     8
                 );
+                std::cout << "print adios got decompressed result" << std::endl;
 
                 // Reassemble the decompressed data
                 // The result contains multiple samples that need to be concatenated
@@ -249,31 +250,64 @@ namespace adios2
                 }
 
                 // Concatenate all reconstructed samples
+                // Concatenate all reconstructed samples
                 torch::Tensor reconstructed;
                 if (result.reconstructed_data.size() == 1) {
                     reconstructed = result.reconstructed_data[0];
                 }
                 else {
-                    reconstructed = torch::cat(result.reconstructed_data , 0);
+                    std::cout << "Concatenating " << result.reconstructed_data.size() << " tensors" << std::endl;
+                    reconstructed = torch::cat(result.reconstructed_data , 0);  // [N, 1, 8, H, W]
                 }
 
-                // Remove dummy dimensions to match original shape
-                while (reconstructed.dim() > static_cast<int64_t>(ndims)) {
-                    reconstructed = reconstructed.squeeze(0);
+                // Remove the dummy dimensions first
+                if (ndims == 3) {
+                    // [N, 1, 8, H, W] -> [N*8, H, W]
+                    reconstructed = reconstructed.squeeze(1);  // [N, 8, H, W]
+                    reconstructed = reconstructed.reshape({ -1, reconstructed.size(-2), reconstructed.size(-1) });  // [N*8, H, W]
+
+                    // NOW crop to original size
+                    reconstructed = reconstructed.slice(0 , 0 , blockCount[0]);  // Crop first dim to original T
+
+                }
+                else if (ndims == 4) {
+                 // [N, C, 8, H, W] -> [C, N*8, H, W]
+                    reconstructed = reconstructed.permute({ 1, 0, 2, 3, 4 });  // [C, N, 8, H, W]
+                    reconstructed = reconstructed.reshape({ reconstructed.size(0), -1, reconstructed.size(-2), reconstructed.size(-1) });
+
+                    // Crop time dimension to original
+                    reconstructed = reconstructed.slice(1 , 0 , blockCount[1]);  // Crop second dim to original T
                 }
 
-                // Convert to CPU and contiguous need better logic for gpu also ask question it
+                // Verify final shape matches blockCount
+                std::vector<int64_t> expected_shape;
+                for (const auto& d : blockCount) {
+                    expected_shape.push_back(static_cast<int64_t>(d));
+                }
+
+                if (reconstructed.sizes().vec() != expected_shape) {
+                    helper::Throw<std::runtime_error>("Operator" , "CompressCAESAR" , "DecompressV1" ,
+                        "Final shape mismatch after cropping");
+                }
+
                 reconstructed = reconstructed.to(torch::kCPU).contiguous();
+                                // ---------------------------------------------------------------
 
+                                // Convert to CPU and contiguous need better logic for gpu also ask question it
+                std::cout << "Moving reconstructed tensor to CPU and making it contiguous" << std::endl;
+                reconstructed = reconstructed.to(torch::kCPU).contiguous();
+                std::cout << "Done reconstucting the data " << std::endl;
                 // Copy to output buffer
                 if (type == DataType::Float) {
+                    std::cout << "Copying FLOAT data to output buffer" << std::endl;
                     std::memcpy(dataOut , reconstructed.data_ptr<float>() , sizeOut);
                 }
                 else if (type == DataType::Double) {
+                    std::cout << "Copying DOUBLE data to output buffer" << std::endl;
                     torch::Tensor double_tensor = reconstructed.to(torch::kFloat64);
                     std::memcpy(dataOut , double_tensor.data_ptr<double>() , sizeOut);
                 }
-
+                std::cout << "Finished copying data to output buffer" << std::endl;
                 return sizeOut;
             }
 
