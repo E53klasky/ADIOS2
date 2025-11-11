@@ -11,7 +11,6 @@ namespace adios2
     {
         namespace compress
         {
-            // add amd support later --- ONCE GAE HAS IT
             std::string DetectDevice()
             {
                 if (torch::cuda::is_available()) {
@@ -45,20 +44,18 @@ namespace adios2
                         "CAESAR only supports 3D and 4D data, got " + std::to_string(ndims) + " dimensions");
                 }
 
-                // MAYBE this should be within CAESAR in the dataset??????
                 if (blockCount[0] < 8) {
                     helper::Throw<std::invalid_argument>("Operator" , "CompressCAESAR" , "Operate" ,
                         "First dimension must be >= 8 for CAESAR compression, got " + std::to_string(blockCount[0]));
                 }
 
-                // Check if compression idk also need to add the 128x128 for the spatial dims to not compress
-                size_t thresholdSize = 1 * 1024 * 1024; // 1MB thresholdz
+                // Check if compression threshold
+                size_t thresholdSize = 1 * 1024 * 1024; // 1MB threshold
                 size_t totalSize = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
                 if (totalSize < thresholdSize) {
                     PutParameter(bufferOut , bufferOutOffset , false);
                     return bufferOutOffset;
                 }
-
 
                 torch::Tensor data_tensor;
                 std::vector<int64_t> sizes;
@@ -96,47 +93,70 @@ namespace adios2
                 config.norm_type = "mean_range";
                 config.n_overlap = 0;
 
-                // Get batch size from parameters or use default default to 32
                 int batch_size = 32;
                 auto itBatchSize = m_Parameters.find("batch_size");
                 if (itBatchSize != m_Parameters.end()) {
                     batch_size = std::stoi(itBatchSize->second);
                 }
 
-                // Add better logic for amd once we get it 
+                float rel_eb = 0.001f;
+                auto itRelEB = m_Parameters.find("rel_eb");
+                if (itRelEB != m_Parameters.end()) {
+                    rel_eb = std::stof(itRelEB->second);
+                }
+
+                // Device setup
                 std::string device_str = DetectDevice();
                 auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
                 Compressor compressor(device);
-                CompressionResult result = compressor.compress(config , batch_size);
+                CompressionResult comp = compressor.compress(config , batch_size , rel_eb);
 
+                // Mark as compressed
                 PutParameter(bufferOut , bufferOutOffset , true);
 
-                // Write compression metadata
-                PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.num_samples));
-                PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.num_batches));
+                // Store encoded streams
+                PutParameter(bufferOut , bufferOutOffset , comp.encoded_latents);
+                PutParameter(bufferOut , bufferOutOffset , comp.encoded_hyper_latents);
 
-                // Write encoded streams sizes first
-                PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.encoded_latents.size()));
-                for (const auto& stream : result.encoded_latents) {
-                    PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(stream.size()));
-                }
+                // Store GAE compressed data
+                PutParameter(bufferOut , bufferOutOffset , comp.gae_comp_data);
 
-                PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(result.encoded_hyper_latents.size()));
-                for (const auto& stream : result.encoded_hyper_latents) {
-                    PutParameter(bufferOut , bufferOutOffset , static_cast<uint64_t>(stream.size()));
-                }
+                // Store CompressionMetaData fields individually
+                const auto& meta = comp.compressionMetaData;
+                PutParameter(bufferOut , bufferOutOffset , meta.offsets);
+                PutParameter(bufferOut , bufferOutOffset , meta.scales);
+                PutParameter(bufferOut , bufferOutOffset , meta.indexes);
 
-                // Write encoded latent streams
-                for (const auto& stream : result.encoded_latents) {
-                    std::memcpy(bufferOut + bufferOutOffset , stream.data() , stream.size());
-                    bufferOutOffset += stream.size();
-                }
+                // Store block_info tuple components
+                PutParameter(bufferOut , bufferOutOffset , std::get<0>(meta.block_info));
+                PutParameter(bufferOut , bufferOutOffset , std::get<1>(meta.block_info));
+                PutParameter(bufferOut , bufferOutOffset , std::get<2>(meta.block_info));
 
-                // Write encoded hyper-latent streams
-                for (const auto& stream : result.encoded_hyper_latents) {
-                    std::memcpy(bufferOut + bufferOutOffset , stream.data() , stream.size());
-                    bufferOutOffset += stream.size();
-                }
+                PutParameter(bufferOut , bufferOutOffset , meta.data_input_shape);
+                PutParameter(bufferOut , bufferOutOffset , meta.filtered_blocks);
+                PutParameter(bufferOut , bufferOutOffset , meta.global_scale);
+                PutParameter(bufferOut , bufferOutOffset , meta.global_offset);
+                PutParameter(bufferOut , bufferOutOffset , meta.padding_recon_info);
+                PutParameter(bufferOut , bufferOutOffset , meta.pad_T);
+
+                // Store GAEMetaData fields individually
+                const auto& gaeMeta = comp.gaeMetaData;
+                PutParameter(bufferOut , bufferOutOffset , gaeMeta.pcaBasis);
+                PutParameter(bufferOut , bufferOutOffset , gaeMeta.uniqueVals);
+                PutParameter(bufferOut , bufferOutOffset , gaeMeta.quanBin);
+                PutParameter(bufferOut , bufferOutOffset , gaeMeta.nVec);
+                PutParameter(bufferOut , bufferOutOffset , gaeMeta.prefixLength);
+                PutParameter(bufferOut , bufferOutOffset , gaeMeta.dataBytes);
+                PutParameter(bufferOut , bufferOutOffset , gaeMeta.coeffIntBytes);
+
+                // Store other CompressionResult fields
+                PutParameter(bufferOut , bufferOutOffset , comp.final_nrmse);
+                PutParameter(bufferOut , bufferOutOffset , comp.num_samples);
+                PutParameter(bufferOut , bufferOutOffset , comp.num_batches);
+
+                // Store batch_size and n_frame for decompression
+                PutParameter(bufferOut , bufferOutOffset , batch_size);
+                PutParameter(bufferOut , bufferOutOffset , 8); // n_frame
 
                 return bufferOutOffset;
             }
@@ -171,146 +191,228 @@ namespace adios2
 
             size_t CompressCAESAR::DecompressV1(const char* bufferIn , const size_t sizeIn , char* dataOut)
             {
+                std::cerr << "[CompressCAESAR][DecompressV1] Entered. sizeIn=" << sizeIn << std::endl;
+
                 size_t bufferInOffset = 0;
+                std::cerr << "[CompressCAESAR][DecompressV1] bufferInOffset=" << bufferInOffset << std::endl;
 
                 // Read metadata
                 const size_t ndims = GetParameter<size_t , size_t>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] ndims=" << ndims << " offset=" << bufferInOffset << std::endl;
                 Dims blockCount(ndims);
                 for (size_t i = 0; i < ndims; ++i)
                 {
                     blockCount[i] = GetParameter<size_t , size_t>(bufferIn , bufferInOffset);
+                    std::cerr << "[CompressCAESAR][DecompressV1] blockCount[" << i << "]=" << blockCount[i] << " offset=" << bufferInOffset << std::endl;
                 }
                 const DataType type = GetParameter<DataType>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] DataType=" << static_cast<int>(type) << " offset=" << bufferInOffset << std::endl;
 
                 const bool isCompressed = GetParameter<bool>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] isCompressed=" << isCompressed << " offset=" << bufferInOffset << std::endl;
 
                 size_t sizeOut = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
+                std::cerr << "[CompressCAESAR][DecompressV1] Computed sizeOut=" << sizeOut << std::endl;
 
                 if (!isCompressed)
                 {
+                    std::cerr << "[CompressCAESAR][DecompressV1] Data not compressed. Exiting and leaving data unchanged." << std::endl;
                     return 0;
                 }
 
-                // Read compression metadata
-                uint64_t num_samples = GetParameter<uint64_t>(bufferIn , bufferInOffset);
-                uint64_t num_batches = GetParameter<uint64_t>(bufferIn , bufferInOffset);
-
-                // Read encoded stream sizes
-                uint64_t num_latent_streams = GetParameter<uint64_t>(bufferIn , bufferInOffset);
-                std::vector<uint64_t> latent_sizes(num_latent_streams);
-                for (auto& size : latent_sizes) {
-                    size = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+                // Read encoded streams
+                std::cerr << "[CompressCAESAR][DecompressV1] Reading encoded_latents at offset=" << bufferInOffset << std::endl;
+                std::vector<std::string> encoded_latents = GetParameter<std::vector<std::string>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] encoded_latents count=" << encoded_latents.size() << std::endl;
+                for (size_t i = 0; i < encoded_latents.size(); ++i) {
+                    std::cerr << "[CompressCAESAR][DecompressV1] encoded_latents[" << i << "].size=" << encoded_latents[i].size() << std::endl;
                 }
 
-                uint64_t num_hyper_latent_streams = GetParameter<uint64_t>(bufferIn , bufferInOffset);
-                std::vector<uint64_t> hyper_latent_sizes(num_hyper_latent_streams);
-                for (auto& size : hyper_latent_sizes) {
-                    size = GetParameter<uint64_t>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] Reading encoded_hyper_latents at offset=" << bufferInOffset << std::endl;
+                std::vector<std::string> encoded_hyper_latents = GetParameter<std::vector<std::string>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] encoded_hyper_latents count=" << encoded_hyper_latents.size() << std::endl;
+                for (size_t i = 0; i < encoded_hyper_latents.size(); ++i) {
+                    std::cerr << "[CompressCAESAR][DecompressV1] encoded_hyper_latents[" << i << "].size=" << encoded_hyper_latents[i].size() << std::endl;
                 }
 
-                // Read encoded latent streams
-                std::vector<std::string> encoded_latents;
-                for (auto size : latent_sizes) {
-                    encoded_latents.emplace_back(bufferIn + bufferInOffset , size);
-                    bufferInOffset += size;
-                }
+                // Read GAE compressed data
+                std::cerr << "[CompressCAESAR][DecompressV1] Reading gae_comp_data at offset=" << bufferInOffset << std::endl;
+                std::vector<uint8_t> gae_comp_data = GetParameter<std::vector<uint8_t>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] gae_comp_data.size=" << gae_comp_data.size() << std::endl;
 
-                // Read encoded hyper-latent streams
-                std::vector<std::string> encoded_hyper_latents;
-                for (auto size : hyper_latent_sizes) {
-                    encoded_hyper_latents.emplace_back(bufferIn + bufferInOffset , size);
-                    bufferInOffset += size;
-                }
+                // Reconstruct CompressionMetaData
+                std::cerr << "[CompressCAESAR][DecompressV1] Reconstructing CompressionMetaData at offset=" << bufferInOffset << std::endl;
+                CompressionMetaData meta;
+                meta.offsets = GetParameter<std::vector<float>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.offsets.size=" << meta.offsets.size() << std::endl;
+                meta.scales = GetParameter<std::vector<float>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.scales.size=" << meta.scales.size() << std::endl;
+                meta.indexes = GetParameter<std::vector<std::vector<int32_t>>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.indexes.size=" << meta.indexes.size() << std::endl;
 
+                // Reconstruct block_info tuple
+                std::cerr << "[CompressCAESAR][DecompressV1] Reconstructing block_info at offset=" << bufferInOffset << std::endl;
+                int32_t block_info_0 = GetParameter<int32_t>(bufferIn , bufferInOffset);
+                int32_t block_info_1 = GetParameter<int32_t>(bufferIn , bufferInOffset);
+                std::vector<int32_t> block_info_2 = GetParameter<std::vector<int32_t>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] block_info_0=" << block_info_0 << " block_info_1=" << block_info_1 << " block_info_2.size=" << block_info_2.size() << std::endl;
+                meta.block_info = std::make_tuple(block_info_0 , block_info_1 , block_info_2);
+
+                meta.data_input_shape = GetParameter<std::vector<int32_t>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.data_input_shape.size=" << meta.data_input_shape.size() << std::endl;
+                meta.filtered_blocks = GetParameter<std::vector<std::pair<int32_t , float>>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.filtered_blocks.size=" << meta.filtered_blocks.size() << std::endl;
+                meta.global_scale = GetParameter<float>(bufferIn , bufferInOffset);
+                meta.global_offset = GetParameter<float>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.global_scale=" << meta.global_scale << " meta.global_offset=" << meta.global_offset << std::endl;
+                meta.padding_recon_info = GetParameter<std::vector<int>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.padding_recon_info.size=" << meta.padding_recon_info.size() << std::endl;
+                meta.pad_T = GetParameter<int64_t>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] meta.pad_T=" << meta.pad_T << std::endl;
+
+                // Reconstruct GAEMetaData
+                std::cerr << "[CompressCAESAR][DecompressV1] Reconstructing GAEMetaData at offset=" << bufferInOffset << std::endl;
+                GAEMetaData gaeMeta;
+                gaeMeta.pcaBasis = GetParameter<std::vector<std::vector<float>>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] gaeMeta.pcaBasis.size=" << gaeMeta.pcaBasis.size() << std::endl;
+                gaeMeta.uniqueVals = GetParameter<std::vector<float>>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] gaeMeta.uniqueVals.size=" << gaeMeta.uniqueVals.size() << std::endl;
+                gaeMeta.quanBin = GetParameter<double>(bufferIn , bufferInOffset);
+                gaeMeta.nVec = GetParameter<int64_t>(bufferIn , bufferInOffset);
+                gaeMeta.prefixLength = GetParameter<int64_t>(bufferIn , bufferInOffset);
+                gaeMeta.dataBytes = GetParameter<int64_t>(bufferIn , bufferInOffset);
+                gaeMeta.coeffIntBytes = GetParameter<size_t>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] gaeMeta.quanBin=" << gaeMeta.quanBin
+                    << " nVec=" << gaeMeta.nVec << " prefixLength=" << gaeMeta.prefixLength
+                    << " dataBytes=" << gaeMeta.dataBytes << " coeffIntBytes=" << gaeMeta.coeffIntBytes << std::endl;
+
+          // Reconstruct other CompressionResult fields
+                double final_nrmse = GetParameter<double>(bufferIn , bufferInOffset);
+                int num_samples = GetParameter<int>(bufferIn , bufferInOffset);
+                int num_batches = GetParameter<int>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] final_nrmse=" << final_nrmse << " num_samples=" << num_samples << " num_batches=" << num_batches << std::endl;
+
+                // Read batch_size and n_frame
+                int batch_size = GetParameter<int>(bufferIn , bufferInOffset);
+                int n_frame = GetParameter<int>(bufferIn , bufferInOffset);
+                std::cerr << "[CompressCAESAR][DecompressV1] batch_size=" << batch_size << " n_frame=" << n_frame << std::endl;
+
+                // Reconstruct full CompressionResult
+                std::cerr << "[CompressCAESAR][DecompressV1] Reconstructing CompressionResult structure" << std::endl;
+                CompressionResult comp;
+                comp.encoded_latents = encoded_latents;
+                comp.encoded_hyper_latents = encoded_hyper_latents;
+                comp.gae_comp_data = gae_comp_data;
+                comp.compressionMetaData = meta;
+                comp.gaeMetaData = gaeMeta;
+                comp.final_nrmse = final_nrmse;
+                comp.num_samples = num_samples;
+                comp.num_batches = num_batches;
+
+                // Setup device
                 std::string device_str = DetectDevice();
-                auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
+                std::cerr << "[CompressCAESAR][DecompressV1] Detected device: " << device_str << std::endl;
+                torch::Device device = (device_str == "cuda") ? torch::Device(torch::kCUDA) : torch::Device(torch::kCPU);
 
-                int batch_size = 32;
-                auto itBatchSize = m_Parameters.find("batch_size");
-                if (itBatchSize != m_Parameters.end()) {
-                    batch_size = std::stoi(itBatchSize->second);
-                }
-
+                // Decompress
+                std::cerr << "[CompressCAESAR][DecompressV1] Creating Decompressor and calling decompress()" << std::endl;
                 Decompressor decompressor(device);
 
-
-                DecompressionResult result = decompressor.decompress(
-                    encoded_latents ,
-                    encoded_hyper_latents ,
-                    batch_size ,
-                    8
-                );
-                std::cout << "print adios got decompressed result" << std::endl;
-
-                // Reassemble the decompressed data
-                // The result contains multiple samples that need to be concatenated
-                if (result.reconstructed_data.empty()) {
-                    helper::Throw<std::runtime_error>("Operator" , "CompressCAESAR" , "DecompressV1" ,
-                        "Decompression returned no data");
-                }
-
-                // Concatenate all reconstructed samples
-                // Concatenate all reconstructed samples
                 torch::Tensor reconstructed;
-                if (result.reconstructed_data.size() == 1) {
-                    reconstructed = result.reconstructed_data[0];
+                try {
+                    reconstructed = decompressor.decompress(
+                        encoded_latents ,
+                        encoded_hyper_latents ,
+                        batch_size ,
+                        n_frame ,
+                        comp
+                    );
                 }
-                else {
-                    std::cout << "Concatenating " << result.reconstructed_data.size() << " tensors" << std::endl;
-                    reconstructed = torch::cat(result.reconstructed_data , 0);  // [N, 1, 8, H, W]
+                catch (const std::exception& e) {
+                    std::cerr << "[CompressCAESAR][DecompressV1] Exception during decompressor.decompress(): " << e.what() << std::endl;
+                    throw;
+                }
+                std::cerr << "[CompressCAESAR][DecompressV1] decompress() returned. reconstructed.sizes=" << reconstructed.sizes() << std::endl;
+
+                // Reshape and crop based on original dimensions
+                try {
+                    if (ndims == 3) {
+                        std::cerr << "[CompressCAESAR][DecompressV1] ndims==3. Before squeeze/reshape sizes=" << reconstructed.sizes() << std::endl;
+                        // Original was [T, H, W], reconstructed is [N, 1, 8, H, W]
+                        reconstructed = reconstructed.squeeze(1);  // [N, 8, H, W]
+                        std::cerr << "[CompressCAESAR][DecompressV1] After squeeze sizes=" << reconstructed.sizes() << std::endl;
+                        reconstructed = reconstructed.reshape({ -1, reconstructed.size(-2), reconstructed.size(-1) });  // [N*8, H, W]
+                        std::cerr << "[CompressCAESAR][DecompressV1] After reshape sizes=" << reconstructed.sizes() << std::endl;
+                        reconstructed = reconstructed.slice(0 , 0 , blockCount[0]);  // [T, H, W]
+                        std::cerr << "[CompressCAESAR][DecompressV1] After slice sizes=" << reconstructed.sizes() << std::endl;
+                    }
+                    else if (ndims == 4) {
+                        std::cerr << "[CompressCAESAR][DecompressV1] ndims==4. Before permute sizes=" << reconstructed.sizes() << std::endl;
+                        // Original was [C, T, H, W], reconstructed is [N, 1, 8, H, W]
+                        reconstructed = reconstructed.permute({ 1, 0, 2, 3, 4 });  // [1, N, 8, H, W]
+                        std::cerr << "[CompressCAESAR][DecompressV1] After permute sizes=" << reconstructed.sizes() << std::endl;
+                        reconstructed = reconstructed.reshape({ reconstructed.size(0), -1, reconstructed.size(-2), reconstructed.size(-1) });  // [1, N*8, H, W]
+                        std::cerr << "[CompressCAESAR][DecompressV1] After reshape sizes=" << reconstructed.sizes() << std::endl;
+                        reconstructed = reconstructed.slice(1 , 0 , blockCount[1]);  // [1, T, H, W]
+                        std::cerr << "[CompressCAESAR][DecompressV1] After slice sizes=" << reconstructed.sizes() << std::endl;
+                        // If original had more channels, we need to handle that
+                        if (blockCount[0] > 1) {
+                            std::cerr << "[CompressCAESAR][DecompressV1] Expanding channels from 1 to " << blockCount[0] << std::endl;
+                            reconstructed = reconstructed.expand({ static_cast<int64_t>(blockCount[0]), -1, -1, -1 });
+                            std::cerr << "[CompressCAESAR][DecompressV1] After expand sizes=" << reconstructed.sizes() << std::endl;
+                        }
+                    }
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[CompressCAESAR][DecompressV1] Exception during reshaping/cropping: " << e.what() << std::endl;
+                    throw;
                 }
 
-                // Remove the dummy dimensions first
-                if (ndims == 3) {
-                    // [N, 1, 8, H, W] -> [N*8, H, W]
-                    reconstructed = reconstructed.squeeze(1);  // [N, 8, H, W]
-                    reconstructed = reconstructed.reshape({ -1, reconstructed.size(-2), reconstructed.size(-1) });  // [N*8, H, W]
-
-                    // NOW crop to original size
-                    reconstructed = reconstructed.slice(0 , 0 , blockCount[0]);  // Crop first dim to original T
-
-                }
-                else if (ndims == 4) {
-                 // [N, C, 8, H, W] -> [C, N*8, H, W]
-                    reconstructed = reconstructed.permute({ 1, 0, 2, 3, 4 });  // [C, N, 8, H, W]
-                    reconstructed = reconstructed.reshape({ reconstructed.size(0), -1, reconstructed.size(-2), reconstructed.size(-1) });
-
-                    // Crop time dimension to original
-                    reconstructed = reconstructed.slice(1 , 0 , blockCount[1]);  // Crop second dim to original T
-                }
-
-                // Verify final shape matches blockCount
+                // Verify final shape
                 std::vector<int64_t> expected_shape;
-                for (const auto& d : blockCount) {
+                for (const auto& d : blockCount)
                     expected_shape.push_back(static_cast<int64_t>(d));
+
+                std::cerr << "[CompressCAESAR][DecompressV1] expected_shape=[";
+                for (size_t i = 0; i < expected_shape.size(); ++i) {
+                    std::cerr << expected_shape[i];
+                    if (i < expected_shape.size() - 1) std::cerr << ", ";
                 }
+                std::cerr << "] reconstructed.sizes=" << reconstructed.sizes() << std::endl;
 
                 if (reconstructed.sizes().vec() != expected_shape) {
+                    std::cerr << "[CompressCAESAR][DecompressV1] Shape mismatch. Expected: [";
+                    for (size_t i = 0; i < expected_shape.size(); ++i) {
+                        std::cerr << expected_shape[i];
+                        if (i < expected_shape.size() - 1) std::cerr << ", ";
+                    }
+                    std::cerr << "], Got: " << reconstructed.sizes() << std::endl;
+
                     helper::Throw<std::runtime_error>("Operator" , "CompressCAESAR" , "DecompressV1" ,
                         "Final shape mismatch after cropping");
                 }
 
                 reconstructed = reconstructed.to(torch::kCPU).contiguous();
-                                // ---------------------------------------------------------------
+                std::cerr << "[CompressCAESAR][DecompressV1] Converted reconstructed to CPU and contiguous. data_ptr=" << reconstructed.data_ptr() << std::endl;
 
-                                // Convert to CPU and contiguous need better logic for gpu also ask question it
-                std::cout << "Moving reconstructed tensor to CPU and making it contiguous" << std::endl;
-                reconstructed = reconstructed.to(torch::kCPU).contiguous();
-                std::cout << "Done reconstucting the data " << std::endl;
                 // Copy to output buffer
                 if (type == DataType::Float) {
-                    std::cout << "Copying FLOAT data to output buffer" << std::endl;
+                    std::cerr << "[CompressCAESAR][DecompressV1] Copying float data to output buffer, sizeOut=" << sizeOut << std::endl;
                     std::memcpy(dataOut , reconstructed.data_ptr<float>() , sizeOut);
                 }
                 else if (type == DataType::Double) {
-                    std::cout << "Copying DOUBLE data to output buffer" << std::endl;
+                    std::cerr << "[CompressCAESAR][DecompressV1] Converting to double and copying to output buffer, sizeOut=" << sizeOut << std::endl;
                     torch::Tensor double_tensor = reconstructed.to(torch::kFloat64);
                     std::memcpy(dataOut , double_tensor.data_ptr<double>() , sizeOut);
                 }
-                std::cout << "Finished copying data to output buffer" << std::endl;
+                else {
+                    std::cerr << "[CompressCAESAR][DecompressV1] Unsupported DataType encountered during copy: " << static_cast<int>(type) << std::endl;
+                    helper::Throw<std::runtime_error>("Operator" , "CompressCAESAR" , "DecompressV1" , "Unsupported DataType in DecompressV1");
+                }
+
+                std::cerr << "[CompressCAESAR][DecompressV1] Finished decompression and data copy. Returning sizeOut=" << sizeOut << std::endl;
                 return sizeOut;
             }
-
         } // end namespace compress
     } // end namespace core
 } // end namespace adios2
