@@ -20,252 +20,267 @@ namespace adios2
                 return "cpu";
             }
 
-
-// =============================================================
-// Basic Put/Get for primitive data types
-// =============================================================
-
-            template <typename T>
-            void PutParameter(std::vector<uint8_t>& buffer , size_t& pos , const T& parameter)
-            {
-                size_t newSize = pos + sizeof(T);
-                if (buffer.size() < newSize) buffer.resize(newSize);
-                std::memcpy(buffer.data() + pos , &parameter , sizeof(T));
-                pos += sizeof(T);
-            }
-
-            template <typename T>
-            T GetParameter(const std::vector<uint8_t>& buffer , size_t& pos)
-            {
-                T ret;
-                std::memcpy(&ret , buffer.data() + pos , sizeof(T));
-                pos += sizeof(T);
-                return ret;
-            }
-
             // =============================================================
+            // SIMPLE SERIALIZATION FUNCTIONS
+            // =============================================================
+
+            // Basic primitives (int, float, double, bool, size_t, etc.)
+            template <typename T>
+            void WriteParameter(char* buffer , size_t& pos , const T& value)
+            {
+                std::memcpy(buffer + pos , &value , sizeof(T));
+                pos += sizeof(T);
+            }
+
+            template <typename T>
+            T ReadParameter(const char* buffer , size_t& pos)
+            {
+                T value;
+                std::memcpy(&value , buffer + pos , sizeof(T));
+                pos += sizeof(T);
+                return value;
+            }
+
             // std::string
-            // =============================================================
-
-            inline void PutString(std::vector<uint8_t>& buffer , size_t& pos , const std::string& s)
+            void WriteString(char* buffer , size_t& pos , const std::string& str)
             {
-                uint64_t size = s.size();
-                PutParameter(buffer , pos , size);
-                size_t newSize = pos + size;
-                if (buffer.size() < newSize) buffer.resize(newSize);
-                std::memcpy(buffer.data() + pos , s.data() , size);
-                pos += size;
+                uint64_t len = str.size();
+                WriteParameter(buffer , pos , len);
+                std::memcpy(buffer + pos , str.data() , len);
+                pos += len;
             }
 
-            inline std::string GetString(const std::vector<uint8_t>& buffer , size_t& pos)
+            std::string ReadString(const char* buffer , size_t& pos)
             {
-                uint64_t size = GetParameter<uint64_t>(buffer , pos);
-                std::string s(size , '\0');
-                std::memcpy(s.data() , buffer.data() + pos , size);
-                pos += size;
-                return s;
+                uint64_t len = ReadParameter<uint64_t>(buffer , pos);
+                std::string str(len , '\0');
+                std::memcpy(&str[0] , buffer + pos , len);
+                pos += len;
+                return str;
             }
 
-            // =============================================================
-            // std::vector<T>
-            // =============================================================
-
+            // std::vector<T> for primitive types
             template <typename T>
-            void PutVector(std::vector<uint8_t>& buffer , size_t& pos , const std::vector<T>& v)
+            void WriteVector(char* buffer , size_t& pos , const std::vector<T>& vec)
             {
-                uint64_t size = v.size();
-                PutParameter(buffer , pos , size);
-                for (const auto& val : v)
-                    PutParameter(buffer , pos , val);
+                uint64_t size = vec.size();
+                WriteParameter(buffer , pos , size);
+
+                if (size > 0)
+                {
+                    size_t bytes = size * sizeof(T);
+                    std::memcpy(buffer + pos , vec.data() , bytes);
+                    pos += bytes;
+                }
             }
 
             template <typename T>
-            std::vector<T> GetVector(const std::vector<uint8_t>& buffer , size_t& pos)
+            std::vector<T> ReadVector(const char* buffer , size_t& pos)
             {
-                uint64_t size = GetParameter<uint64_t>(buffer , pos);
-                std::vector<T> v(size);
-                for (auto& val : v)
-                    val = GetParameter<T>(buffer , pos);
-                return v;
+                uint64_t size = ReadParameter<uint64_t>(buffer , pos);
+                std::vector<T> vec(size);
+
+                if (size > 0)
+                {
+                    size_t bytes = size * sizeof(T);
+                    std::memcpy(vec.data() , buffer + pos , bytes);
+                    pos += bytes;
+                }
+
+                return vec;
             }
 
-            // =============================================================
-            // std::vector<std::vector<T>>
-            // =============================================================
+            // std::vector<std::string>
+            void WriteVectorOfStrings(char* buffer , size_t& pos , const std::vector<std::string>& vec)
+            {
+                uint64_t count = vec.size();
+                WriteParameter(buffer , pos , count);
+
+                for (const auto& str : vec)
+                {
+                    WriteString(buffer , pos , str);
+                }
+            }
+
+            std::vector<std::string> ReadVectorOfStrings(const char* buffer , size_t& pos)
+            {
+                uint64_t count = ReadParameter<uint64_t>(buffer , pos);
+                std::vector<std::string> vec;
+                vec.reserve(count);
+
+                for (uint64_t i = 0; i < count; ++i)
+                {
+                    vec.push_back(ReadString(buffer , pos));
+                }
+
+                return vec;
+            }
+
+            // std::vector<std::vector<T>> for 2D arrays
+            template <typename T>
+            void WriteVector2D(char* buffer , size_t& pos , const std::vector<std::vector<T>>& vec2d)
+            {
+                uint64_t outer_size = vec2d.size();
+                WriteParameter(buffer , pos , outer_size);
+
+                for (const auto& inner_vec : vec2d)
+                {
+                    WriteVector(buffer , pos , inner_vec);
+                }
+            }
 
             template <typename T>
-            void PutVector2D(std::vector<uint8_t>& buffer , size_t& pos , const std::vector<std::vector<T>>& vv)
+            std::vector<std::vector<T>> ReadVector2D(const char* buffer , size_t& pos)
             {
-                uint64_t outer = vv.size();
-                PutParameter(buffer , pos , outer);
-                for (const auto& inner : vv)
-                    PutVector(buffer , pos , inner);
+                uint64_t outer_size = ReadParameter<uint64_t>(buffer , pos);
+                std::vector<std::vector<T>> vec2d;
+                vec2d.reserve(outer_size);
+
+                for (uint64_t i = 0; i < outer_size; ++i)
+                {
+                    vec2d.push_back(ReadVector<T>(buffer , pos));
+                }
+
+                return vec2d;
             }
 
-            template <typename T>
-            std::vector<std::vector<T>> GetVector2D(const std::vector<uint8_t>& buffer , size_t& pos)
-            {
-                uint64_t outer = GetParameter<uint64_t>(buffer , pos);
-                std::vector<std::vector<T>> vv(outer);
-                for (auto& inner : vv)
-                    inner = GetVector<T>(buffer , pos);
-                return vv;
-            }
-
-            // =============================================================
             // std::pair<T1, T2>
-            // =============================================================
-
             template <typename T1 , typename T2>
-            void PutPair(std::vector<uint8_t>& buffer , size_t& pos , const std::pair<T1 , T2>& p)
+            void WritePair(char* buffer , size_t& pos , const std::pair<T1 , T2>& p)
             {
-                PutParameter(buffer , pos , p.first);
-                PutParameter(buffer , pos , p.second);
+                WriteParameter(buffer , pos , p.first);
+                WriteParameter(buffer , pos , p.second);
             }
 
             template <typename T1 , typename T2>
-            std::pair<T1 , T2> GetPair(const std::vector<uint8_t>& buffer , size_t& pos)
+            std::pair<T1 , T2> ReadPair(const char* buffer , size_t& pos)
             {
-                T1 first = GetParameter<T1>(buffer , pos);
-                T2 second = GetParameter<T2>(buffer , pos);
+                T1 first = ReadParameter<T1>(buffer , pos);
+                T2 second = ReadParameter<T2>(buffer , pos);
                 return { first, second };
             }
 
-            // =============================================================
+            // std::vector<std::pair<T1, T2>>
+            template <typename T1 , typename T2>
+            void WriteVectorOfPairs(char* buffer , size_t& pos , const std::vector<std::pair<T1 , T2>>& vec)
+            {
+                uint64_t size = vec.size();
+                WriteParameter(buffer , pos , size);
+
+                for (const auto& p : vec)
+                {
+                    WritePair(buffer , pos , p);
+                }
+            }
+
+            template <typename T1 , typename T2>
+            std::vector<std::pair<T1 , T2>> ReadVectorOfPairs(const char* buffer , size_t& pos)
+            {
+                uint64_t size = ReadParameter<uint64_t>(buffer , pos);
+                std::vector<std::pair<T1 , T2>> vec;
+                vec.reserve(size);
+
+                for (uint64_t i = 0; i < size; ++i)
+                {
+                    vec.push_back(ReadPair<T1 , T2>(buffer , pos));
+                }
+
+                return vec;
+            }
+
             // std::tuple<int32_t, int32_t, std::vector<int32_t>>
-            // =============================================================
-
-            inline void PutTuple(std::vector<uint8_t>& buffer , size_t& pos , const std::tuple<int32_t , int32_t , std::vector<int32_t>>& t)
+            void WriteTuple(char* buffer , size_t& pos ,
+                const std::tuple<int32_t , int32_t , std::vector<int32_t>>& tup)
             {
-                PutParameter(buffer , pos , std::get<0>(t));
-                PutParameter(buffer , pos , std::get<1>(t));
-                PutVector(buffer , pos , std::get<2>(t));
+                WriteParameter(buffer , pos , std::get<0>(tup));
+                WriteParameter(buffer , pos , std::get<1>(tup));
+                WriteVector(buffer , pos , std::get<2>(tup));
             }
 
-            inline std::tuple<int32_t , int32_t , std::vector<int32_t>> GetTuple(const std::vector<uint8_t>& buffer , size_t& pos)
+            std::tuple<int32_t , int32_t , std::vector<int32_t>> ReadTuple(const char* buffer , size_t& pos)
             {
-                int32_t a = GetParameter<int32_t>(buffer , pos);
-                int32_t b = GetParameter<int32_t>(buffer , pos);
-                auto v = GetVector<int32_t>(buffer , pos);
-                return { a, b, v };
+                int32_t first = ReadParameter<int32_t>(buffer , pos);
+                int32_t second = ReadParameter<int32_t>(buffer , pos);
+                std::vector<int32_t> third = ReadVector<int32_t>(buffer , pos);
+                return { first, second, third };
             }
 
-            // =============================================================
-            // GAEMetaData
-            // =============================================================
-
-            struct GAEMetaData {
-                bool GAE_correction_occur;
-                std::vector<int> padding_recon_info;
-                std::vector<std::vector<float>> pcaBasis;
-                std::vector<float> uniqueVals;
-                double quanBin;
-                int64_t nVec;
-                int64_t prefixLength;
-                int64_t dataBytes;
-                size_t coeffIntBytes;
-            };
-
-            inline void PutGAEMetaData(std::vector<uint8_t>& buffer , size_t& pos , const GAEMetaData& m)
-            {
-                PutParameter(buffer , pos , m.GAE_correction_occur);
-                PutVector(buffer , pos , m.padding_recon_info);
-                PutVector2D(buffer , pos , m.pcaBasis);
-                PutVector(buffer , pos , m.uniqueVals);
-                PutParameter(buffer , pos , m.quanBin);
-                PutParameter(buffer , pos , m.nVec);
-                PutParameter(buffer , pos , m.prefixLength);
-                PutParameter(buffer , pos , m.dataBytes);
-                PutParameter(buffer , pos , m.coeffIntBytes);
-            }
-
-            inline GAEMetaData GetGAEMetaData(const std::vector<uint8_t>& buffer , size_t& pos)
-            {
-                GAEMetaData m;
-                m.GAE_correction_occur = GetParameter<bool>(buffer , pos);
-                m.padding_recon_info = GetVector<int>(buffer , pos);
-                m.pcaBasis = GetVector2D<float>(buffer , pos);
-                m.uniqueVals = GetVector<float>(buffer , pos);
-                m.quanBin = GetParameter<double>(buffer , pos);
-                m.nVec = GetParameter<int64_t>(buffer , pos);
-                m.prefixLength = GetParameter<int64_t>(buffer , pos);
-                m.dataBytes = GetParameter<int64_t>(buffer , pos);
-                m.coeffIntBytes = GetParameter<size_t>(buffer , pos);
-                return m;
-            }
-
-            // =============================================================
             // CompressionMetaData
+            void WriteCompressionMetaData(char* buffer , size_t& pos , const CompressionMetaData& meta)
+            {
+                WriteVector(buffer , pos , meta.offsets);
+                WriteVector(buffer , pos , meta.scales);
+                WriteVector2D(buffer , pos , meta.indexes);
+                WriteTuple(buffer , pos , meta.block_info);
+                WriteVector(buffer , pos , meta.data_input_shape);
+                WriteVectorOfPairs(buffer , pos , meta.filtered_blocks);
+                WriteParameter(buffer , pos , meta.global_scale);
+                WriteParameter(buffer , pos , meta.global_offset);
+                WriteParameter(buffer , pos , meta.pad_T);
+            }
+
+            CompressionMetaData ReadCompressionMetaData(const char* buffer , size_t& pos)
+            {
+                CompressionMetaData meta;
+                meta.offsets = ReadVector<float>(buffer , pos);
+                meta.scales = ReadVector<float>(buffer , pos);
+                meta.indexes = ReadVector2D<int32_t>(buffer , pos);
+                meta.block_info = ReadTuple(buffer , pos);
+                meta.data_input_shape = ReadVector<int32_t>(buffer , pos);
+                meta.filtered_blocks = ReadVectorOfPairs<int32_t , float>(buffer , pos);
+                meta.global_scale = ReadParameter<float>(buffer , pos);
+                meta.global_offset = ReadParameter<float>(buffer , pos);
+                meta.pad_T = ReadParameter<int64_t>(buffer , pos);
+                return meta;
+            }
+
+            // GAEMetaData
+            void WriteGAEMetaData(char* buffer , size_t& pos , const GAEMetaData& meta)
+            {
+                WriteParameter(buffer , pos , meta.GAE_correction_occur);
+                WriteVector(buffer , pos , meta.padding_recon_info);
+                WriteVector2D(buffer , pos , meta.pcaBasis);
+                WriteVector(buffer , pos , meta.uniqueVals);
+                WriteParameter(buffer , pos , meta.quanBin);
+                WriteParameter(buffer , pos , meta.nVec);
+                WriteParameter(buffer , pos , meta.prefixLength);
+                WriteParameter(buffer , pos , meta.dataBytes);
+                WriteParameter(buffer , pos , meta.coeffIntBytes);
+            }
+
+            GAEMetaData ReadGAEMetaData(const char* buffer , size_t& pos)
+            {
+                GAEMetaData meta;
+                meta.GAE_correction_occur = ReadParameter<bool>(buffer , pos);
+                meta.padding_recon_info = ReadVector<int>(buffer , pos);
+                meta.pcaBasis = ReadVector2D<float>(buffer , pos);
+                meta.uniqueVals = ReadVector<float>(buffer , pos);
+                meta.quanBin = ReadParameter<double>(buffer , pos);
+                meta.nVec = ReadParameter<int64_t>(buffer , pos);
+                meta.prefixLength = ReadParameter<int64_t>(buffer , pos);
+                meta.dataBytes = ReadParameter<int64_t>(buffer , pos);
+                meta.coeffIntBytes = ReadParameter<size_t>(buffer , pos);
+                return meta;
+            }
+
+            // =============================================================
+            // COMPRESSCAESAR CLASS IMPLEMENTATION
             // =============================================================
 
-            struct CompressionMetaData {
-                std::vector<float> offsets;
-                std::vector<float> scales;
-                std::vector<std::vector<int32_t>> indexes;
-                std::tuple<int32_t , int32_t , std::vector<int32_t>> block_info;
-                std::vector<int32_t> data_input_shape;
-                std::vector<std::pair<int32_t , float>> filtered_blocks;
-                float global_scale;
-                float global_offset;
-                int64_t pad_T;
-            };
-
-            inline void PutCompressionMetaData(std::vector<uint8_t>& buffer , size_t& pos , const CompressionMetaData& m)
+            CompressCAESAR::CompressCAESAR(const Params& parameters)
+                : Operator("caesar" , COMPRESS_CAESAR , "compress" , parameters)
             {
-                PutVector(buffer , pos , m.offsets);
-                PutVector(buffer , pos , m.scales);
-                PutVector2D(buffer , pos , m.indexes);
-                PutTuple(buffer , pos , m.block_info);
-                PutVector(buffer , pos , m.data_input_shape);
-
-                uint64_t fb_size = m.filtered_blocks.size();
-                PutParameter(buffer , pos , fb_size);
-                for (auto& p : m.filtered_blocks)
-                    PutPair(buffer , pos , p);
-
-                PutParameter(buffer , pos , m.global_scale);
-                PutParameter(buffer , pos , m.global_offset);
-                PutParameter(buffer , pos , m.pad_T);
             }
 
-            inline CompressionMetaData GetCompressionMetaData(const std::vector<uint8_t>& buffer , size_t& pos)
+            bool CompressCAESAR::IsDataTypeValid(const DataType type) const
             {
-                CompressionMetaData m;
-                m.offsets = GetVector<float>(buffer , pos);
-                m.scales = GetVector<float>(buffer , pos);
-                m.indexes = GetVector2D<int32_t>(buffer , pos);
-                m.block_info = GetTuple(buffer , pos);
-                m.data_input_shape = GetVector<int32_t>(buffer , pos);
-
-                uint64_t fb_size = GetParameter<uint64_t>(buffer , pos);
-                m.filtered_blocks.resize(fb_size);
-                for (auto& p : m.filtered_blocks)
-                    p = GetPair<int32_t , float>(buffer , pos);
-
-                m.global_scale = GetParameter<float>(buffer , pos);
-                m.global_offset = GetParameter<float>(buffer , pos);
-                m.pad_T = GetParameter<int64_t>(buffer , pos);
-                return m;
+                // CAESAR supports Float and Double
+                if (type == DataType::Float || type == DataType::Double)
+                {
+                    return true;
+                }
+                return false;
             }
-
-            inline void PutVectorOfStrings(std::vector<uint8_t>& buffer , size_t& pos ,
-                const std::vector<std::string>& v)
-            {
-                uint64_t count = v.size();
-                PutParameter(buffer , pos , count);
-                for (const auto& s : v)
-                    PutString(buffer , pos , s);
-            }
-
-            inline std::vector<std::string> GetVectorOfStrings(const std::vector<uint8_t>& buffer , size_t& pos)
-            {
-                uint64_t count = GetParameter<uint64_t>(buffer , pos);
-                std::vector<std::string> v(count);
-                for (auto& s : v)
-                    s = GetString(buffer , pos);
-                return v;
-            }
-
 
             size_t CompressCAESAR::Operate(
                 const char* dataIn ,
@@ -277,14 +292,17 @@ namespace adios2
                 const uint8_t bufferVersion = 1;
                 size_t bufferOutOffset = 0;
 
+                // Write header
                 MakeCommonHeader(bufferOut , bufferOutOffset , bufferVersion);
 
+                // Write block dimensions
                 const size_t ndims = blockCount.size();
-                PutParameter(bufferOut , bufferOutOffset , ndims);
+                WriteParameter(bufferOut , bufferOutOffset , ndims);
                 for (const auto& d : blockCount)
-                    PutParameter(bufferOut , bufferOutOffset , d);
-                PutParameter(bufferOut , bufferOutOffset , type);
+                    WriteParameter(bufferOut , bufferOutOffset , d);
+                WriteParameter(bufferOut , bufferOutOffset , type);
 
+                // Validate dimensions
                 if (ndims != 3 && ndims != 4)
                     helper::Throw<std::invalid_argument>(
                         "Operator" , "CompressCAESAR" , "Operate" ,
@@ -295,11 +313,12 @@ namespace adios2
                         "Operator" , "CompressCAESAR" , "Operate" ,
                         "First dimension must be >= 8 for CAESAR compression, got " + std::to_string(blockCount[0]));
 
+                // Check size threshold
                 size_t thresholdSize = 1 * 1024 * 1024;
                 size_t totalSize = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
                 if (totalSize < thresholdSize)
                 {
-                    PutParameter(bufferOut , bufferOutOffset , false);
+                    WriteParameter(bufferOut , bufferOutOffset , false);
                     return bufferOutOffset;
                 }
 
@@ -319,6 +338,7 @@ namespace adios2
                 torch::Tensor data_5d = (ndims == 3) ? data_tensor.unsqueeze(0).unsqueeze(0)
                     : data_tensor.unsqueeze(0);
 
+                // Setup dataset config
                 DatasetConfig config;
                 config.memory_data = data_5d;
                 config.n_frame = 8;
@@ -329,6 +349,7 @@ namespace adios2
                 config.norm_type = "mean_range";
                 config.n_overlap = 0;
 
+                // Get parameters
                 int batch_size = 32;
                 auto itBatchSize = m_Parameters.find("batch_size");
                 if (itBatchSize != m_Parameters.end())
@@ -339,37 +360,48 @@ namespace adios2
                 if (itRelEB != m_Parameters.end())
                     rel_eb = std::stof(itRelEB->second);
 
+                // Compress
                 std::string device_str = DetectDevice();
                 auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
                 Compressor compressor(device);
 
                 CompressionResult comp = compressor.compress(config , batch_size , rel_eb);
 
-                // === Start writing output buffer ===
-                PutParameter(bufferOut , bufferOutOffset , true); // mark as compressed
-
-                // encoded streams (directly to char*)
+                // Write compressed data
+                WriteParameter(bufferOut , bufferOutOffset , true); // compressed flag
                 WriteVectorOfStrings(bufferOut , bufferOutOffset , comp.encoded_latents);
                 WriteVectorOfStrings(bufferOut , bufferOutOffset , comp.encoded_hyper_latents);
-
                 WriteVector(bufferOut , bufferOutOffset , comp.gae_comp_data);
-
-                // CompressionMetaData
                 WriteCompressionMetaData(bufferOut , bufferOutOffset , comp.compressionMetaData);
-
-                // GAEMetaData
                 WriteGAEMetaData(bufferOut , bufferOutOffset , comp.gaeMetaData);
-
-                // Other scalar fields
-                PutParameter(bufferOut , bufferOutOffset , comp.final_nrmse);
-                PutParameter(bufferOut , bufferOutOffset , comp.num_samples);
-                PutParameter(bufferOut , bufferOutOffset , comp.num_batches);
-
-                // Decompression parameters
-                PutParameter(bufferOut , bufferOutOffset , batch_size);
-                PutParameter(bufferOut , bufferOutOffset , config.n_frame);
+                WriteParameter(bufferOut , bufferOutOffset , comp.final_nrmse);
+                WriteParameter(bufferOut , bufferOutOffset , comp.num_samples);
+                WriteParameter(bufferOut , bufferOutOffset , comp.num_batches);
+                WriteParameter(bufferOut , bufferOutOffset , batch_size);
+                WriteParameter(bufferOut , bufferOutOffset , config.n_frame);
 
                 return bufferOutOffset;
+            }
+
+            size_t CompressCAESAR::InverseOperate(const char* bufferIn , const size_t sizeIn , char* dataOut)
+            {
+                size_t bufferInOffset = 0;
+
+                // Read header (matches what MakeCommonHeader wrote)
+                const uint8_t operatorType = GetParameter<uint8_t>(bufferIn , bufferInOffset);
+                const uint8_t bufferVersion = GetParameter<uint8_t>(bufferIn , bufferInOffset);
+                const uint16_t padding = GetParameter<uint16_t>(bufferIn , bufferInOffset);
+
+                if (bufferVersion == 1)
+                {
+                    return DecompressV1(bufferIn + bufferInOffset , sizeIn - bufferInOffset , dataOut);
+                }
+                else
+                {
+                    helper::Throw<std::runtime_error>("Operator" , "CompressCAESAR" , "InverseOperate" ,
+                        "Unknown buffer version: " + std::to_string(bufferVersion));
+                }
+                return 0;
             }
 
             size_t CompressCAESAR::DecompressV1(
@@ -379,13 +411,15 @@ namespace adios2
             {
                 size_t bufferInOffset = 0;
 
-                const size_t ndims = GetParameter<size_t , size_t>(bufferIn , bufferInOffset);
+                // Read block dimensions
+                const size_t ndims = ReadParameter<size_t>(bufferIn , bufferInOffset);
                 Dims blockCount(ndims);
                 for (size_t i = 0; i < ndims; ++i)
-                    blockCount[i] = GetParameter<size_t , size_t>(bufferIn , bufferInOffset);
+                    blockCount[i] = ReadParameter<size_t>(bufferIn , bufferInOffset);
 
-                const DataType type = GetParameter<DataType>(bufferIn , bufferInOffset);
-                const bool isCompressed = GetParameter<bool>(bufferIn , bufferInOffset);
+                const DataType type = ReadParameter<DataType>(bufferIn , bufferInOffset);
+                const bool isCompressed = ReadParameter<bool>(bufferIn , bufferInOffset);
+
                 if (!isCompressed)
                     return 0;
 
@@ -394,20 +428,14 @@ namespace adios2
                 // Read compressed data
                 std::vector<std::string> encoded_latents = ReadVectorOfStrings(bufferIn , bufferInOffset);
                 std::vector<std::string> encoded_hyper_latents = ReadVectorOfStrings(bufferIn , bufferInOffset);
-                std::vector<uint8_t> gae_comp_data = ReadVectorPrimitive<uint8_t>(bufferIn , bufferInOffset);
-
-                // CompressionMetaData
+                std::vector<uint8_t> gae_comp_data = ReadVector<uint8_t>(bufferIn , bufferInOffset);
                 CompressionMetaData meta = ReadCompressionMetaData(bufferIn , bufferInOffset);
-
-                // GAEMetaData
                 GAEMetaData gaeMeta = ReadGAEMetaData(bufferIn , bufferInOffset);
-
-                // Other fields
-                double final_nrmse = GetParameter<double>(bufferIn , bufferInOffset);
-                int num_samples = GetParameter<int>(bufferIn , bufferInOffset);
-                int num_batches = GetParameter<int>(bufferIn , bufferInOffset);
-                int batch_size = GetParameter<int>(bufferIn , bufferInOffset);
-                int n_frame = GetParameter<int>(bufferIn , bufferInOffset);
+                double final_nrmse = ReadParameter<double>(bufferIn , bufferInOffset);
+                int num_samples = ReadParameter<int>(bufferIn , bufferInOffset);
+                int num_batches = ReadParameter<int>(bufferIn , bufferInOffset);
+                int batch_size = ReadParameter<int>(bufferIn , bufferInOffset);
+                int n_frame = ReadParameter<int>(bufferIn , bufferInOffset);
 
                 // Rebuild CompressionResult
                 CompressionResult comp;
@@ -433,7 +461,7 @@ namespace adios2
                     n_frame ,
                     comp);
 
-                // Post-process
+                // Post-process based on dimensions
                 if (ndims == 3)
                 {
                     reconstructed = reconstructed.squeeze(1);
@@ -452,7 +480,7 @@ namespace adios2
 
                 reconstructed = reconstructed.to(torch::kCPU).contiguous();
 
-                // Copy to dataOut
+                // Copy to output
                 if (type == DataType::Float)
                     std::memcpy(dataOut , reconstructed.data_ptr<float>() , sizeOut);
                 else if (type == DataType::Double)
@@ -463,8 +491,6 @@ namespace adios2
 
                 return sizeOut;
             }
-
-
 
         } // end namespace compress
     } // end namespace core
