@@ -14,15 +14,15 @@ namespace adios2
 
             std::string DetectDevice()
             {
+    std::cout<<"something"<<std::endl;
                 if (torch::cuda::is_available()) {
                     return "cuda";
                 }
                 return "cpu";
             }
 
-            // =============================================================
-            // SIMPLE SERIALIZATION FUNCTIONS
-            // =============================================================
+
+
 
             // Basic primitives (int, float, double, bool, size_t, etc.)
             template <typename T>
@@ -263,10 +263,6 @@ namespace adios2
                 return meta;
             }
 
-            // =============================================================
-            // COMPRESSCAESAR CLASS IMPLEMENTATION
-            // =============================================================
-
             CompressCAESAR::CompressCAESAR(const Params& parameters)
                 : Operator("caesar" , COMPRESS_CAESAR , "compress" , parameters)
             {
@@ -274,7 +270,6 @@ namespace adios2
 
             bool CompressCAESAR::IsDataTypeValid(const DataType type) const
             {
-                // CAESAR supports Float and Double
                 if (type == DataType::Float || type == DataType::Double)
                 {
                     return true;
@@ -292,17 +287,14 @@ namespace adios2
                 const uint8_t bufferVersion = 1;
                 size_t bufferOutOffset = 0;
 
-                // Write header
                 MakeCommonHeader(bufferOut , bufferOutOffset , bufferVersion);
 
-                // Write block dimensions
                 const size_t ndims = blockCount.size();
                 WriteParameter(bufferOut , bufferOutOffset , ndims);
                 for (const auto& d : blockCount)
                     WriteParameter(bufferOut , bufferOutOffset , d);
                 WriteParameter(bufferOut , bufferOutOffset , type);
 
-                // Validate dimensions
                 if (ndims != 3 && ndims != 4)
                     helper::Throw<std::invalid_argument>(
                         "Operator" , "CompressCAESAR" , "Operate" ,
@@ -313,7 +305,6 @@ namespace adios2
                         "Operator" , "CompressCAESAR" , "Operate" ,
                         "First dimension must be >= 8 for CAESAR compression, got " + std::to_string(blockCount[0]));
 
-                // Check size threshold
                 size_t thresholdSize = 1 * 1024 * 1024;
                 size_t totalSize = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
                 if (totalSize < thresholdSize)
@@ -338,7 +329,6 @@ namespace adios2
                 torch::Tensor data_5d = (ndims == 3) ? data_tensor.unsqueeze(0).unsqueeze(0)
                     : data_tensor.unsqueeze(0);
 
-                // Setup dataset config
                 DatasetConfig config;
                 config.memory_data = data_5d;
                 config.n_frame = 8;
@@ -349,7 +339,6 @@ namespace adios2
                 config.norm_type = "mean_range";
                 config.n_overlap = 0;
 
-                // Get parameters
                 int batch_size = 32;
                 auto itBatchSize = m_Parameters.find("batch_size");
                 if (itBatchSize != m_Parameters.end())
@@ -360,15 +349,13 @@ namespace adios2
                 if (itRelEB != m_Parameters.end())
                     rel_eb = std::stof(itRelEB->second);
 
-                // Compress
                 std::string device_str = DetectDevice();
                 auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
                 Compressor compressor(device);
 
                 CompressionResult comp = compressor.compress(config , batch_size , rel_eb);
 
-                // Write compressed data
-                WriteParameter(bufferOut , bufferOutOffset , true); // compressed flag
+                WriteParameter(bufferOut , bufferOutOffset , true);
                 WriteVectorOfStrings(bufferOut , bufferOutOffset , comp.encoded_latents);
                 WriteVectorOfStrings(bufferOut , bufferOutOffset , comp.encoded_hyper_latents);
                 WriteVector(bufferOut , bufferOutOffset , comp.gae_comp_data);
@@ -387,7 +374,6 @@ namespace adios2
             {
                 size_t bufferInOffset = 0;
 
-                // Read header (matches what MakeCommonHeader wrote)
                 const uint8_t operatorType = GetParameter<uint8_t>(bufferIn , bufferInOffset);
                 const uint8_t bufferVersion = GetParameter<uint8_t>(bufferIn , bufferInOffset);
                 const uint16_t padding = GetParameter<uint16_t>(bufferIn , bufferInOffset);
@@ -411,7 +397,6 @@ namespace adios2
             {
                 size_t bufferInOffset = 0;
 
-                // Read block dimensions
                 const size_t ndims = ReadParameter<size_t>(bufferIn , bufferInOffset);
                 Dims blockCount(ndims);
                 for (size_t i = 0; i < ndims; ++i)
@@ -425,7 +410,6 @@ namespace adios2
 
                 size_t sizeOut = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
 
-                // Read compressed data
                 std::vector<std::string> encoded_latents = ReadVectorOfStrings(bufferIn , bufferInOffset);
                 std::vector<std::string> encoded_hyper_latents = ReadVectorOfStrings(bufferIn , bufferInOffset);
                 std::vector<uint8_t> gae_comp_data = ReadVector<uint8_t>(bufferIn , bufferInOffset);
@@ -437,7 +421,6 @@ namespace adios2
                 int batch_size = ReadParameter<int>(bufferIn , bufferInOffset);
                 int n_frame = ReadParameter<int>(bufferIn , bufferInOffset);
 
-                // Rebuild CompressionResult
                 CompressionResult comp;
                 comp.encoded_latents = std::move(encoded_latents);
                 comp.encoded_hyper_latents = std::move(encoded_hyper_latents);
@@ -448,7 +431,6 @@ namespace adios2
                 comp.num_samples = num_samples;
                 comp.num_batches = num_batches;
 
-                // Decompress
                 std::string device_str = DetectDevice();
                 torch::Device device = (device_str == "cuda") ? torch::Device(torch::kCUDA)
                     : torch::Device(torch::kCPU);
@@ -461,7 +443,6 @@ namespace adios2
                     n_frame ,
                     comp);
 
-                // Post-process based on dimensions
                 if (ndims == 3)
                 {
                     reconstructed = reconstructed.squeeze(1);
@@ -480,7 +461,6 @@ namespace adios2
 
                 reconstructed = reconstructed.to(torch::kCPU).contiguous();
 
-                // Copy to output
                 if (type == DataType::Float)
                     std::memcpy(dataOut , reconstructed.data_ptr<float>() , sizeOut);
                 else if (type == DataType::Double)
