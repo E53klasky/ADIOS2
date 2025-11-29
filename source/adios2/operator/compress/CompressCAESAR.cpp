@@ -14,15 +14,11 @@ namespace adios2
 
             std::string DetectDevice()
             {
-    std::cout<<"something"<<std::endl;
                 if (torch::cuda::is_available()) {
                     return "cuda";
                 }
                 return "cpu";
             }
-
-
-
 
             // Basic primitives (int, float, double, bool, size_t, etc.)
             template <typename T>
