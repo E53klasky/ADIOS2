@@ -4,7 +4,7 @@
 #include "models/caesar_decompress.h"
 #include "dataset/dataset.h"
 #include <cstring>
-
+#include "data_utils.h"
 namespace adios2
 {
     namespace core
@@ -201,6 +201,27 @@ namespace adios2
                 return { first, second, third };
             }
 
+            // PaddingInfo
+            void WritePaddingInfo(char* buffer , size_t& pos , const PaddingInfo& info)
+            {
+                WriteVector(buffer , pos , info.original_shape);
+                WriteParameter(buffer , pos , info.original_length);
+                WriteVector(buffer , pos , info.padded_shape);
+                WriteParameter(buffer , pos , info.H);
+                WriteParameter(buffer , pos , info.W);
+            }
+
+            PaddingInfo ReadPaddingInfo(const char* buffer , size_t& pos)
+            {
+                PaddingInfo info;
+                info.original_shape = ReadVector<int64_t>(buffer , pos);
+                info.original_length = ReadParameter<int64_t>(buffer , pos);
+                info.padded_shape = ReadVector<int64_t>(buffer , pos);
+                info.H = ReadParameter<int64_t>(buffer , pos);
+                info.W = ReadParameter<int64_t>(buffer , pos);
+                return info;
+            }
+
             // CompressionMetaData
             void WriteCompressionMetaData(char* buffer , size_t& pos , const CompressionMetaData& meta)
             {
@@ -291,17 +312,7 @@ namespace adios2
                     WriteParameter(bufferOut , bufferOutOffset , d);
                 WriteParameter(bufferOut , bufferOutOffset , type);
 
-                if (ndims != 3 && ndims != 4)
-                    helper::Throw<std::invalid_argument>(
-                        "Operator" , "CompressCAESAR" , "Operate" ,
-                        "CAESAR only supports 3D and 4D data, got " + std::to_string(ndims) + " dimensions");
-
-                if (blockCount[0] < 8)
-                    helper::Throw<std::invalid_argument>(
-                        "Operator" , "CompressCAESAR" , "Operate" ,
-                        "First dimension must be >= 8 for CAESAR compression, got " + std::to_string(blockCount[0]));
-
-                size_t thresholdSize = 1 * 1024 * 1024;
+                size_t thresholdSize = 524288;
                 size_t totalSize = helper::GetTotalSize(blockCount , helper::GetDataTypeSize(type));
                 if (totalSize < thresholdSize)
                 {
@@ -322,11 +333,19 @@ namespace adios2
                 else
                     helper::Throw<std::invalid_argument>("Operator" , "CompressCAESAR" , "Operate" , "Unsupported data type");
 
-                torch::Tensor data_5d = (ndims == 3) ? data_tensor.unsqueeze(0).unsqueeze(0)
-                    : data_tensor.unsqueeze(0);
+                // Convert to 5D format and apply padding to ensure minimum size
+                auto [padded_5d , padding_info] = to_5d_and_pad(data_tensor , 256 , 256);
+
+                // Check if padded tensor meets minimum size requirement (1x1x8x256x256 = 524288 elements)
+                size_t padded_size = padded_5d.numel();
+                if (padded_size < thresholdSize)
+                {
+                    WriteParameter(bufferOut , bufferOutOffset , false);
+                    return bufferOutOffset;
+                }
 
                 DatasetConfig config;
-                config.memory_data = data_5d;
+                config.memory_data = padded_5d;
                 config.n_frame = 8;
                 config.dataset_name = "ADIOS2_Block";
                 config.variable_idx = 0;
@@ -341,7 +360,7 @@ namespace adios2
                     batch_size = std::stoi(itBatchSize->second);
 
                 float rel_eb = 0.001f;
-                auto itRelEB = m_Parameters.find("rel_eb");
+                auto itRelEB = m_Parameters.find("error_bound");
                 if (itRelEB != m_Parameters.end())
                     rel_eb = std::stof(itRelEB->second);
 
@@ -362,6 +381,7 @@ namespace adios2
                 WriteParameter(bufferOut , bufferOutOffset , comp.num_batches);
                 WriteParameter(bufferOut , bufferOutOffset , batch_size);
                 WriteParameter(bufferOut , bufferOutOffset , config.n_frame);
+                WritePaddingInfo(bufferOut , bufferOutOffset , padding_info);
 
                 return bufferOutOffset;
             }
@@ -416,6 +436,7 @@ namespace adios2
                 int num_batches = ReadParameter<int>(bufferIn , bufferInOffset);
                 int batch_size = ReadParameter<int>(bufferIn , bufferInOffset);
                 int n_frame = ReadParameter<int>(bufferIn , bufferInOffset);
+                PaddingInfo padding_info = ReadPaddingInfo(bufferIn , bufferInOffset);
 
                 CompressionResult comp;
                 comp.encoded_latents = std::move(encoded_latents);
@@ -439,29 +460,16 @@ namespace adios2
                     n_frame ,
                     comp);
 
-                if (ndims == 3)
-                {
-                    reconstructed = reconstructed.squeeze(1);
-                    reconstructed = reconstructed.reshape({ -1, reconstructed.size(-2), reconstructed.size(-1) });
-                    reconstructed = reconstructed.slice(0 , 0 , blockCount[0]);
-                }
-                else if (ndims == 4)
-                {
-                    reconstructed = reconstructed.permute({ 1, 0, 2, 3, 4 });
-                    reconstructed = reconstructed.reshape({ reconstructed.size(0), -1, reconstructed.size(-2), reconstructed.size(-1) });
-                    reconstructed = reconstructed.slice(1 , 0 , blockCount[1]);
+                // Restore original tensor from 5D padded format using metadata
+                torch::Tensor restored = restore_from_5d(reconstructed , padding_info);
 
-                    if (blockCount[0] > 1)
-                        reconstructed = reconstructed.expand({ static_cast<int64_t>(blockCount[0]), -1, -1, -1 });
-                }
-
-                reconstructed = reconstructed.to(torch::kCPU).contiguous();
+                restored = restored.to(torch::kCPU).contiguous();
 
                 if (type == DataType::Float)
-                    std::memcpy(dataOut , reconstructed.data_ptr<float>() , sizeOut);
+                    std::memcpy(dataOut , restored.data_ptr<float>() , sizeOut);
                 else if (type == DataType::Double)
                 {
-                    torch::Tensor double_tensor = reconstructed.to(torch::kFloat64);
+                    torch::Tensor double_tensor = restored.to(torch::kFloat64);
                     std::memcpy(dataOut , double_tensor.data_ptr<double>() , sizeOut);
                 }
 
