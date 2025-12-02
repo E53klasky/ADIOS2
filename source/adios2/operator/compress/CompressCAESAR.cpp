@@ -5,6 +5,7 @@
 #include "dataset/dataset.h"
 #include <cstring>
 #include "data_utils.h"
+#include <chrono> // for testing will remove later
 namespace adios2
 {
     namespace core
@@ -368,7 +369,11 @@ namespace adios2
                 auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
                 Compressor compressor(device);
 
+                auto start_time = std::chrono::high_resolution_clock::now(); // for testing
                 CompressionResult comp = compressor.compress(config , batch_size , rel_eb);
+                auto end_time = std::chrono::high_resolution_clock::now(); // for testing
+                auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time); // for testing
+                std::cout << "Time taken for compression is: " << duration.count() << " seconds" << std::endl;
 
                 WriteParameter(bufferOut , bufferOutOffset , true);
                 WriteVectorOfStrings(bufferOut , bufferOutOffset , comp.encoded_latents);
@@ -453,14 +458,18 @@ namespace adios2
                     : torch::Device(torch::kCPU);
                 Decompressor decompressor(device);
 
+                auto start_time = std::chrono::high_resolution_clock::now(); // for testing
                 torch::Tensor reconstructed = decompressor.decompress(
                     comp.encoded_latents ,
                     comp.encoded_hyper_latents ,
                     batch_size ,
                     n_frame ,
                     comp);
+                auto end_time = std::chrono::high_resolution_clock::now(); // for testing
+                auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time); // for testing
+                std::cout << "Time taken for decompression is: " << duration.count() << " seconds" << std::endl;
 
-                // Restore original tensor from 5D padded format using metadata
+                // Restore original tensor from 5D padded format using metadata add more dims later
                 torch::Tensor restored = restore_from_5d(reconstructed , padding_info);
 
                 restored = restored.to(torch::kCPU).contiguous();
