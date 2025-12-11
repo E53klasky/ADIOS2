@@ -1,3 +1,0 @@
-# Directory labels
- EVPath
-# Source files and their labels

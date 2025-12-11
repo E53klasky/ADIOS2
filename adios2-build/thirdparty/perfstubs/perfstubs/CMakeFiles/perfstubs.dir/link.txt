@@ -1,1 +1,0 @@
-/usr/bin/cc -fPIC  -w -O3 -DNDEBUG -shared -Wl,-soname,libadios2_perfstubs.so.2.11 -o ../../../lib/libadios2_perfstubs.so.2.11.0 CMakeFiles/perfstubs.dir/perfstubs_api/timer.c.o  -Wl,-rpath,:::::::::::::: 

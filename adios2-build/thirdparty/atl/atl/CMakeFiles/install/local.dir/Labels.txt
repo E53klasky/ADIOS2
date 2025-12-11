@@ -1,3 +1,0 @@
-# Directory labels
- ATL
-# Source files and their labels

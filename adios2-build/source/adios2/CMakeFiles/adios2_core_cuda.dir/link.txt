@@ -1,1 +1,0 @@
-/usr/lib/nvidia-cuda-toolkit/bin/g++ -fPIC -shared -Wl,-soname,libadios2_core_cuda.so -o ../../lib/libadios2_core_cuda.so @CMakeFiles/adios2_core_cuda.dir/objects1.rsp CMakeFiles/adios2_core_cuda.dir/cmake_device_link.o @CMakeFiles/adios2_core_cuda.dir/linkLibs.rsp -L"/usr/lib/x86_64-linux-gnu/stubs" -L"/usr/lib/x86_64-linux-gnu"

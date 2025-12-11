@@ -1,5 +1,0 @@
-# Directory labels
- EVPath
-# Source files and their labels
-/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/EVPath/EVPath/cmenet.c
-/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/EVPath/EVPath/ip_config.c

@@ -1,7 +1,0 @@
-# Directory labels
- ATL
-# Source files and their labels
-/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/atl/atl/atom.c
-/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/atl/atl/attr.c
-/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/atl/atl/lookup3.c
-/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/atl/atl/tclHash.c

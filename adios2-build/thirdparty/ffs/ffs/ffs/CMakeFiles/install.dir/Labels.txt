@@ -1,3 +1,0 @@
-# Directory labels
- FFS
-# Source files and their labels
