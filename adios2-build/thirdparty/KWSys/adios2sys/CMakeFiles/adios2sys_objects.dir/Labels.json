@@ -1,0 +1,76 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/EncodingC.c"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/MD5.c"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/Configure.h"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/Encoding.h"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/MD5.h"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/Directory.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/Directory.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/DynamicLoader.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/DynamicLoader.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/EncodingCXX.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/Encoding.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/RegularExpression.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/RegularExpression.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/SystemTools.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/SystemTools.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/CommandLineArguments.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/CommandLineArguments.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/FStream.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/FStream.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/thirdparty/KWSys/adios2sys/Status.cxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/Status.hxx"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/KWSys/adios2sys/adios2sys/Configure.hxx"
+		}
+	],
+	"target" : 
+	{
+		"labels" : [],
+		"name" : "adios2sys_objects"
+	}
+}

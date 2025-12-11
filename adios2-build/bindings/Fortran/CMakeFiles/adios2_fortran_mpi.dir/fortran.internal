@@ -1,0 +1,4 @@
+# The fortran modules provided by this target.
+provides
+ adios2_adios_init_mod@adios2_adios_init_mpi_smod.smod
+ adios2_io_open_mod@adios2_io_open_mpi_smod.smod

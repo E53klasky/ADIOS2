@@ -1,0 +1,25 @@
+# The fortran modules provided by this target.
+provides
+ adios2.mod
+ adios2_adios_init_mod.mod
+ adios2_adios_init_mod@adios2_adios_init_serial_smod.smod
+ adios2_adios_mod.mod
+ adios2_attribute_data_mod.mod
+ adios2_attribute_mod.mod
+ adios2_engine_begin_step_mod.mod
+ adios2_engine_get_mod.mod
+ adios2_engine_mod.mod
+ adios2_engine_put_mod.mod
+ adios2_functions_allocate_mod.mod
+ adios2_functions_mod.mod
+ adios2_io_define_attribute_mod.mod
+ adios2_io_define_derived_variable_mod.mod
+ adios2_io_define_variable_mod.mod
+ adios2_io_mod.mod
+ adios2_io_open_mod.mod
+ adios2_io_open_mod@adios2_io_open_serial_smod.smod
+ adios2_operator_mod.mod
+ adios2_parameters_mod.mod
+ adios2_variable_max_mod.mod
+ adios2_variable_min_mod.mod
+ adios2_variable_mod.mod

@@ -1,0 +1,8 @@
+# Directory labels
+ FFS
+# Source files and their labels
+/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/CMakeFiles/generated
+/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/CMakeFiles/generated.rule
+/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/cod.tab.c.rule
+/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/cod_node.c.rule
+/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/lex.yy.c.rule

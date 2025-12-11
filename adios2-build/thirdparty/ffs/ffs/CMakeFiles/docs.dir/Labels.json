@@ -1,0 +1,25 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/CMakeFiles/docs"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/CMakeFiles/docs.rule"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/cod_node.c.rule"
+		},
+		{
+			"file" : "/home/jlx/Projects/CAESAR_ALL/ADIOS2/adios2-build/thirdparty/ffs/ffs/lex.yy.c.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"FFS"
+		],
+		"name" : "docs"
+	}
+}
