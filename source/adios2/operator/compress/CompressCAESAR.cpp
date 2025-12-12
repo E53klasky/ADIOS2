@@ -393,7 +393,6 @@ namespace adios2
                 WriteVector(bufferOut , bufferOutOffset , comp.gae_comp_data);
                 WriteCompressionMetaData(bufferOut , bufferOutOffset , comp.compressionMetaData);
                 WriteGAEMetaData(bufferOut , bufferOutOffset , comp.gaeMetaData);
-                WriteParameter(bufferOut , bufferOutOffset , comp.final_nrmse);
                 WriteParameter(bufferOut , bufferOutOffset , comp.num_samples);
                 WriteParameter(bufferOut , bufferOutOffset , comp.num_batches);
                 WriteParameter(bufferOut , bufferOutOffset , batch_size);
@@ -448,7 +447,7 @@ namespace adios2
                 std::vector<uint8_t> gae_comp_data = ReadVector<uint8_t>(bufferIn , bufferInOffset);
                 CompressionMetaData meta = ReadCompressionMetaData(bufferIn , bufferInOffset);
                 GAEMetaData gaeMeta = ReadGAEMetaData(bufferIn , bufferInOffset);
-                double final_nrmse = ReadParameter<double>(bufferIn , bufferInOffset);
+        
                 int num_samples = ReadParameter<int>(bufferIn , bufferInOffset);
                 int num_batches = ReadParameter<int>(bufferIn , bufferInOffset);
                 int batch_size = ReadParameter<int>(bufferIn , bufferInOffset);
@@ -461,7 +460,6 @@ namespace adios2
                 comp.gae_comp_data = std::move(gae_comp_data);
                 comp.compressionMetaData = std::move(meta);
                 comp.gaeMetaData = std::move(gaeMeta);
-                comp.final_nrmse = final_nrmse;
                 comp.num_samples = num_samples;
                 comp.num_batches = num_batches;
 
