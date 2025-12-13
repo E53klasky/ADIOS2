@@ -6,16 +6,16 @@
 #include <cstring>
 #include "data_utils.h"
 #include <chrono> // for testing will remove later
-#include <cuda_runtime.h>
+//#include <cuda_runtime.h> // note i comment this out beacsue this will not work on amd or cpu only system
 namespace adios2
 {
     namespace core
     {
         namespace compress
         {
-
+            // use this function use DRY. let's not repeat ourselves!!!!!!!!!!!!!!!!!!!!
             std::string DetectDevice()
-            {
+            {   // add better logic for this someone can has torch avaiable and still not make it with cuda
                 if (torch::cuda::is_available()) {
                     return "cuda";
                 }
@@ -322,7 +322,6 @@ namespace adios2
                     return bufferOutOffset;
                 }
 
-                // Prepare input tensor
                 torch::Tensor data_tensor;
                 std::vector<int64_t> sizes(blockCount.begin() , blockCount.end());
 
@@ -334,7 +333,6 @@ namespace adios2
                 else
                     helper::Throw<std::invalid_argument>("Operator" , "CompressCAESAR" , "Operate" , "Unsupported data type");
 
-                // Convert to 5D format and apply padding to ensure minimum size
                 auto [padded_5d , padding_info] = to_5d_and_pad(data_tensor , 256 , 256);
 
                 // Check if padded tensor meets minimum size requirement (1x1x8x256x256 = 524288 elements)
@@ -365,27 +363,30 @@ namespace adios2
                 if (itRelEB != m_Parameters.end())
                     rel_eb = std::stof(itRelEB->second);
 
-                //std::string device_str = DetectDevice();
-                //auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
-                torch::Device device = torch::kCPU;
-                
-                if (torch::cuda::is_available()) {
-                    int current_device_id = 0;
-                    cudaError_t err = cudaGetDevice(&current_device_id);
-                    
-                    if (err == cudaSuccess) {
-                        device = torch::Device(torch::kCUDA, current_device_id);
-                    } else {
-                        device = torch::kCUDA; 
-                    }
-                }
+                std::string device_str = DetectDevice();
+                auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
+                // torch::Device device = torch::kCPU;
+
+                // if (torch::cuda::is_available()) {
+                //     // int current_device_id = 0;
+                //     // cudaError_t err = cudaGetDevice(&current_device_id);
+
+                //     // if (err == cudaSuccess) {
+                //     //     device = torch::Device(torch::kCUDA , current_device_id);
+                //     // }
+                //     // else {
+                //     //     device = torch::kCUDA;
+                //     // }
+                // }
                 Compressor compressor(device);
 
                 auto start_time = std::chrono::high_resolution_clock::now(); // for testing
                 CompressionResult comp = compressor.compress(config , batch_size , rel_eb);
                 auto end_time = std::chrono::high_resolution_clock::now(); // for testing
                 auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time); // for testing
-                std::cout << "Time taken for compression is: " << duration.count() << " seconds" << std::endl;
+                std::cout << "\nTime taken for compression is: " << duration.count() << " seconds" << std::endl;
+
+                size_t compressed_start_offset = bufferOutOffset;
 
                 WriteParameter(bufferOut , bufferOutOffset , true);
                 WriteVectorOfStrings(bufferOut , bufferOutOffset , comp.encoded_latents);
@@ -398,6 +399,10 @@ namespace adios2
                 WriteParameter(bufferOut , bufferOutOffset , batch_size);
                 WriteParameter(bufferOut , bufferOutOffset , config.n_frame);
                 WritePaddingInfo(bufferOut , bufferOutOffset , padding_info);
+
+                size_t total_compressed_size = bufferOutOffset - compressed_start_offset;
+                std::cout << "\nOriginal data size: " << totalSize << " bytes" << std::endl;
+                std::cout << "\nTotal compressed size: " << total_compressed_size << " bytes" << std::endl;
 
                 return bufferOutOffset;
             }
@@ -447,7 +452,7 @@ namespace adios2
                 std::vector<uint8_t> gae_comp_data = ReadVector<uint8_t>(bufferIn , bufferInOffset);
                 CompressionMetaData meta = ReadCompressionMetaData(bufferIn , bufferInOffset);
                 GAEMetaData gaeMeta = ReadGAEMetaData(bufferIn , bufferInOffset);
-        
+
                 int num_samples = ReadParameter<int>(bufferIn , bufferInOffset);
                 int num_batches = ReadParameter<int>(bufferIn , bufferInOffset);
                 int batch_size = ReadParameter<int>(bufferIn , bufferInOffset);
@@ -463,21 +468,22 @@ namespace adios2
                 comp.num_samples = num_samples;
                 comp.num_batches = num_batches;
 
-                //std::string device_str = DetectDevice();
-                //torch::Device device = (device_str == "cuda") ? torch::Device(torch::kCUDA)
-                    //: torch::Device(torch::kCPU);
-                torch::Device device = torch::kCPU;
-                
-                if (torch::cuda::is_available()) {
-                    int current_device_id = 0;
-                    cudaError_t err = cudaGetDevice(&current_device_id);
-                    
-                    if (err == cudaSuccess) {
-                        device = torch::Device(torch::kCUDA, current_device_id);
-                    } else {
-                        device = torch::kCUDA; 
-                    }
-                }
+                std::string device_str = DetectDevice();
+                torch::Device device = (device_str == "cuda") ? torch::Device(torch::kCUDA)
+                    : torch::Device(torch::kCPU);
+                // torch::Device device = torch::kCPU;
+
+                // if (torch::cuda::is_available()) {
+                //     // int current_device_id = 0;
+                //     // cudaError_t err = cudaGetDevice(&current_device_id);
+
+                //     // if (err == cudaSuccess) {
+                //     //     device = torch::Device(torch::kCUDA , current_device_id);
+                //     // }
+                //     // else {
+                //     //     device = torch::kCUDA;
+                //     // }
+                // }
                 Decompressor decompressor(device);
 
                 auto start_time = std::chrono::high_resolution_clock::now(); // for testing
@@ -491,9 +497,9 @@ namespace adios2
                 auto duration = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time); // for testing
                 std::cout << "Time taken for decompression is: " << duration.count() << " seconds" << std::endl;
 
-                // Restore original tensor from 5D padded format using metadata add more dims later
-                torch::Tensor restored = restore_from_5d(reconstructed , padding_info);
 
+                torch::Tensor restored = restore_from_5d(reconstructed , padding_info);
+                // use better logic for later for the gpu ///////////////////////////////////////////
                 restored = restored.to(torch::kCPU).contiguous();
 
                 if (type == DataType::Float)
