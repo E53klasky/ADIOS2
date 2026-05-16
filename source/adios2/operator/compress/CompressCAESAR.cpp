@@ -277,7 +277,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
       helper::GetTotalSize(blockCount, helper::GetDataTypeSize(type));
 
   // input size under this bound will not compress
-  size_t thresholdSize = 5000000;
+  size_t thresholdSize = 1000000;
 
   auto itThreshold = m_Parameters.find("threshold");
   if (itThreshold != m_Parameters.end()) {
@@ -379,7 +379,9 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
 
   CompressionResult comp = compressor.compress(config, batch_size, accuracy);
 
+
   size_t compressed_start_offset = bufferOutOffset;
+  padded_5d = torch::Tensor();
 
   WriteParameter(bufferOut, bufferOutOffset, true);
   WriteVectorOfStrings(bufferOut, bufferOutOffset, comp.encoded_latents);
