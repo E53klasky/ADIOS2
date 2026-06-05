@@ -272,9 +272,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
     WriteParameter(bufferOut, bufferOutOffset, d);
   WriteParameter(bufferOut, bufferOutOffset, type);
 
-  // Calculate total size
-  size_t sizeOut =
-      helper::GetTotalSize(blockCount, helper::GetDataTypeSize(type));
+  size_t sizeOut = helper::GetTotalSize(blockCount, helper::GetDataTypeSize(type));
 
   // input size under this bound will not compress
   size_t thresholdSize = 1000000;
@@ -285,8 +283,9 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   }
 
   if (sizeOut < thresholdSize) {
-    /* disable compression and add marker in the header*/
     WriteParameter(bufferOut, bufferOutOffset, false);
+    std::memcpy(bufferOut + bufferOutOffset, dataIn, sizeOut);
+    bufferOutOffset += sizeOut;
     return bufferOutOffset;
   }
 
@@ -326,8 +325,6 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
     original_shape_vec.push_back(data_tensor.size(i));
   }
 
-  data_tensor = data_tensor.squeeze();
-  auto shapes = data_tensor.sizes();
 
   int64_t H, W;
   bool force_padding = false;
@@ -429,11 +426,13 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
 
   const DataType type = ReadParameter<DataType>(bufferIn, bufferInOffset);
   const bool isCompressed = ReadParameter<bool>(bufferIn, bufferInOffset);
+  size_t sizeOut = helper::GetTotalSize(blockCount, helper::GetDataTypeSize(type));
+  
+  if (!isCompressed) {
+    std::memcpy(dataOut, bufferIn + bufferInOffset, sizeOut);
+    return sizeOut;
+  }
 
-  if (!isCompressed) return 0;
-
-  size_t sizeOut =
-      helper::GetTotalSize(blockCount, helper::GetDataTypeSize(type));
 
   std::vector<std::string> encoded_latents =
       ReadVectorOfStrings(bufferIn, bufferInOffset);
