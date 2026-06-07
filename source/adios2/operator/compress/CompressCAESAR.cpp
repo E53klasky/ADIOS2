@@ -330,8 +330,8 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   bool force_padding = false;
 
   if (original_shape_vec.size() >= 5 &&
-      original_shape_vec[original_shape_vec.size() - 2] >= 128 &&
-      original_shape_vec[original_shape_vec.size() - 1] >= 128) {
+      original_shape_vec[original_shape_vec.size() - 2] >= 32 &&
+      original_shape_vec[original_shape_vec.size() - 1] >= 32 ) {
     H = static_cast<int64_t>(original_shape_vec[original_shape_vec.size() - 2]);
     W = static_cast<int64_t>(original_shape_vec[original_shape_vec.size() - 1]);
   } else {
