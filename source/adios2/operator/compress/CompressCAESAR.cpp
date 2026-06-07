@@ -275,7 +275,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   size_t sizeOut = helper::GetTotalSize(blockCount, helper::GetDataTypeSize(type));
 
   // input size under this bound will not compress
-  size_t thresholdSize = 1000000;
+  size_t thresholdSize = 5000000;
 
   auto itThreshold = m_Parameters.find("threshold");
   if (itThreshold != m_Parameters.end()) {
@@ -381,6 +381,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   padded_5d = torch::Tensor();
 
   WriteParameter(bufferOut, bufferOutOffset, true);
+  WriteString(bufferOut, bufferOutOffset, get_model_name());
   WriteVectorOfStrings(bufferOut, bufferOutOffset, comp.encoded_latents);
   WriteVectorOfStrings(bufferOut, bufferOutOffset, comp.encoded_hyper_latents);
   WriteVector(bufferOut, bufferOutOffset, comp.gae_comp_data);
@@ -427,12 +428,17 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
   const DataType type = ReadParameter<DataType>(bufferIn, bufferInOffset);
   const bool isCompressed = ReadParameter<bool>(bufferIn, bufferInOffset);
   size_t sizeOut = helper::GetTotalSize(blockCount, helper::GetDataTypeSize(type));
-  
   if (!isCompressed) {
-    std::memcpy(dataOut, bufferIn + bufferInOffset, sizeOut);
-    return sizeOut;
+      std::memcpy(dataOut, bufferIn + bufferInOffset, sizeOut);
+      return sizeOut;
   }
-
+  std::string compressed_model = ReadString(bufferIn, bufferInOffset);  
+  std::string installed_model = get_model_name();
+  if (compressed_model != installed_model) {
+      helper::Throw<std::runtime_error>("Operator", "CompressCAESAR",
+          "DecompressV1", "Model mismatch: data compressed with '" +
+          compressed_model + "' but installed model is '" + installed_model + "'");
+  }
 
   std::vector<std::string> encoded_latents =
       ReadVectorOfStrings(bufferIn, bufferInOffset);

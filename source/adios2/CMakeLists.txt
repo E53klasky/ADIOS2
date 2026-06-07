@@ -390,7 +390,7 @@ endif()
 
 if(ADIOS2_HAVE_CAESAR)
   target_sources(adios2_core PRIVATE operator/compress/CompressCAESAR.cpp)
-  target_link_libraries(adios2_core PRIVATE caesar::caesar_lib)
+  target_link_libraries(adios2_core PRIVATE caesar::caesar)
 endif()
 
 set(maybe_adios2_blosc2)
