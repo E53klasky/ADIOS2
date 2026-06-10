@@ -11,7 +11,7 @@
 namespace adios2 {
 namespace core {
 namespace compress {
-// remove later
+
 std::string DetectDevice() {
   if (torch::cuda::is_available()) {
     return "cuda";
@@ -308,8 +308,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   auto model_type = m_Parameters.find("model");
   if (model_type != m_Parameters.end()) {
     std::string model_name = helper::LowerCase(model_type->second);
-    if (model_name != "caesar_v")  // make logic better we need caesar method of
-                                   // all models and yeah
+    if (model_name != get_model_name() )  
     {
       helper::Throw<std::invalid_argument>("Operator", "CompressCAESAR",
                                            "Operate",
@@ -388,6 +387,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   WriteCompressionMetaData(bufferOut, bufferOutOffset,
                            comp.compressionMetaData);
   WriteGAEMetaData(bufferOut, bufferOutOffset, comp.gaeMetaData);
+  WriteVector2D(bufferOut, bufferOutOffset, comp.latent_indexes);
   WriteParameter(bufferOut, bufferOutOffset, comp.num_samples);
   WriteParameter(bufferOut, bufferOutOffset, comp.num_batches);
   WriteParameter(bufferOut, bufferOutOffset, batch_size);
@@ -448,6 +448,7 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
       ReadVector<uint8_t>(bufferIn, bufferInOffset);
   CompressionMetaData meta = ReadCompressionMetaData(bufferIn, bufferInOffset);
   GAEMetaData gaeMeta = ReadGAEMetaData(bufferIn, bufferInOffset);
+  std::vector<std::vector<int32_t>> latent_indexes = ReadVector2D<int32_t>(bufferIn, bufferInOffset);
 
   int num_samples = ReadParameter<int>(bufferIn, bufferInOffset);
   int num_batches = ReadParameter<int>(bufferIn, bufferInOffset);
@@ -461,6 +462,7 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
   comp.gae_comp_data = std::move(gae_comp_data);
   comp.compressionMetaData = std::move(meta);
   comp.gaeMetaData = std::move(gaeMeta);
+  comp.latent_indexes = std::move(latent_indexes);
   comp.num_samples = num_samples;
   comp.num_batches = num_batches;
 
