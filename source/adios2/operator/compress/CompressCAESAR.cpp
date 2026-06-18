@@ -281,6 +281,17 @@ std::vector<LBRCBlock> ReadLBRCBlocks(const char *buffer, size_t &pos) {
   return blocks;
 }
 
+size_t CompressCAESAR::GetEstimatedSize(const size_t ElemCount,
+                                         const size_t ElemSize,
+                                         const size_t ndims,
+                                         const size_t *dims) const
+{
+    const size_t inputSize = ElemCount * ElemSize;
+    // Base class returns inputSize + 128, which is far too small.
+    // CAESAR output is unbounded: encoded latents, GAE PCA basis,
+    // and LBRC streams are all variable-length and can exceed raw input.
+    return inputSize * 4 + 32ULL * 1024 * 1024;
+}
 
 CompressCAESAR::CompressCAESAR(const Params &parameters)
     : Operator("caesar", COMPRESS_CAESAR, "compress", parameters) {}
