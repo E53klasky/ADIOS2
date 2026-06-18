@@ -408,8 +408,6 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   WriteVector(bufferOut, bufferOutOffset, comp.gae_comp_data);
   WriteCompressionMetaData(bufferOut, bufferOutOffset, comp.compressionMetaData);
   WriteGAEMetaData(bufferOut, bufferOutOffset, comp.gaeMetaData);
-  WriteParameter(bufferOut, bufferOutOffset, comp.num_samples);
-  WriteParameter(bufferOut, bufferOutOffset, comp.num_batches);
   WriteParameter(bufferOut, bufferOutOffset, batch_size);
   WriteParameter(bufferOut, bufferOutOffset, config.n_frame);
   WriteLBRCMetaData(bufferOut, bufferOutOffset, comp.lbrcMetaData);
@@ -471,8 +469,6 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
   comp.gae_comp_data         = ReadVector<uint8_t>(bufferIn, bufferInOffset);
   comp.compressionMetaData   = ReadCompressionMetaData(bufferIn, bufferInOffset);
   comp.gaeMetaData           = ReadGAEMetaData(bufferIn, bufferInOffset);
-  comp.num_samples           = ReadParameter<int>(bufferIn, bufferInOffset);
-  comp.num_batches           = ReadParameter<int>(bufferIn, bufferInOffset);
   int batch_size             = ReadParameter<int>(bufferIn, bufferInOffset);
   int n_frame                = ReadParameter<int>(bufferIn, bufferInOffset);
   comp.lbrcMetaData          = ReadLBRCMetaData(bufferIn, bufferInOffset);
