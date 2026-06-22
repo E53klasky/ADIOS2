@@ -405,6 +405,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   WriteParameter(bufferOut, bufferOutOffset, comp.use_lbrc);
   WriteVectorOfStrings(bufferOut, bufferOutOffset, comp.encoded_latents);
   WriteVectorOfStrings(bufferOut, bufferOutOffset, comp.encoded_hyper_latents);
+  WriteVector2D(bufferOut, bufferOutOffset, comp.latent_indexes); 
   WriteVector(bufferOut, bufferOutOffset, comp.gae_comp_data);
   WriteCompressionMetaData(bufferOut, bufferOutOffset, comp.compressionMetaData);
   WriteGAEMetaData(bufferOut, bufferOutOffset, comp.gaeMetaData);
@@ -466,6 +467,7 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
   comp.use_lbrc              = ReadParameter<bool>(bufferIn, bufferInOffset);
   comp.encoded_latents       = ReadVectorOfStrings(bufferIn, bufferInOffset);
   comp.encoded_hyper_latents = ReadVectorOfStrings(bufferIn, bufferInOffset);
+  comp.latent_indexes        = ReadVector2D<int32_t>(bufferIn, bufferInOffset);
   comp.gae_comp_data         = ReadVector<uint8_t>(bufferIn, bufferInOffset);
   comp.compressionMetaData   = ReadCompressionMetaData(bufferIn, bufferInOffset);
   comp.gaeMetaData           = ReadGAEMetaData(bufferIn, bufferInOffset);
