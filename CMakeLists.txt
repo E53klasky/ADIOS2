@@ -170,6 +170,7 @@ mark_as_advanced(CLEAR BUILD_TESTING)
 adios_option(BigWhoop   "Enable support for BigWhoop transforms" AUTO)
 adios_option(Blosc2     "Enable support for c-blosc-2 transforms" AUTO)
 adios_option(BZip2      "Enable support for BZip2 transforms" AUTO)
+adios_option(CAESAR      "Enable support for CAESAR compression" AUTO)
 adios_option(Caliper    "Enable support for Caliper" AUTO)
 adios_option(ZFP        "Enable support for ZFP transforms" AUTO)
 adios_option(SZ         "Enable support for SZ transforms" AUTO)
@@ -280,7 +281,7 @@ endif()
 
 
 set(ADIOS2_CONFIG_OPTS
-    DataMan DataSpaces HDF5 HDF5_VOL MHS SST Fortran MPI Python PIP BigWhoop Blosc2 BZip2
+    DataMan DataSpaces HDF5 HDF5_VOL MHS SST Fortran MPI Python PIP BigWhoop Blosc2 BZip2 CAESAR
     LIBPRESSIO MGARD MGARD_MDR PRODM PNG SZ SZ3 ZFP DAOS IME O_DIRECT Sodium Catalyst SysVShMem UCX
     ZeroMQ Profiling Derived_Variable AWSSDK OpenSSL XRootD CURL GPU_Support CUDA Kokkos
     Kokkos_CUDA Kokkos_HIP Kokkos_SYCL Campaign KVCACHE

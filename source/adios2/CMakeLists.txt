@@ -423,6 +423,11 @@ if(ADIOS2_HAVE_BZip2)
   target_link_libraries(adios2_core PRIVATE BZip2::BZip2)
 endif()
 
+if(ADIOS2_HAVE_CAESAR)
+  target_sources(adios2_core PRIVATE operator/compress/CompressCAESAR.cpp)
+  target_link_libraries(adios2_core PRIVATE caesar::caesar)
+endif()
+
 if(ADIOS2_HAVE_ZFP)
   target_sources(adios2_core PRIVATE operator/compress/CompressZFP.cpp)
   target_link_libraries(adios2_core PRIVATE zfp::zfp)

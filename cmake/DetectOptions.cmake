@@ -121,6 +121,15 @@ if(BZIP2_FOUND)
   set(ADIOS2_HAVE_BZip2 TRUE)
 endif()
 
+if (ADIOS2_USE_CAESAR STREQUAL AUTO)
+  find_package(CAESAR)
+elseif(ADIOS2_USE_CAESAR)
+  find_package(CAESAR REQUIRED)
+endif()
+if(CAESAR_FOUND)
+  set(ADIOS2_HAVE_CAESAR TRUE)
+endif()
+
 # ZFP
 if(ADIOS2_USE_ZFP)
   find_package(ZFP 1.0.0 CONFIG QUIET)

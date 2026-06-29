@@ -101,6 +101,11 @@ if(NOT @BUILD_SHARED_LIBS@)
     find_dependency(BZip2)
   endif()
 
+  set(ADIOS2_HAVE_CAESAR @ADIOS2_HAVE_CAESAR@)
+  if(ADIOS2_HAVE_CAESAR)
+    find_dependency(CAESAR)
+  endif()
+
   set(ADIOS2_HAVE_ZFP @ADIOS2_HAVE_ZFP@)
   if(ADIOS2_HAVE_ZFP)
     find_dependency(ZFP)

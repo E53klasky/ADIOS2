@@ -525,6 +525,18 @@ namespace key
 }
 #endif
 
+// CAESAR PARAMETERS
+#ifdef ADIOS2_HAVE_CAESAR
+namespace caesar
+{
+namespace key
+{
+constexpr char tolerance[] = "accuracy";
+constexpr char mode[] = "model";
+}
+}
+#endif
+
 #ifdef ADIOS2_HAVE_LIBPRESSIO
 constexpr char LossyLIBPRESSIO[] = "libpressio";
 namespace libpressio

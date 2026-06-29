@@ -22,6 +22,10 @@
 #include "adios2/operator/compress/CompressBZIP2.h"
 #endif
 
+#ifdef ADIOS2_HAVE_CAESAR
+#include "adios2/operator/compress/CompressCAESAR.h"
+#endif
+
 #ifdef ADIOS2_HAVE_LIBPRESSIO
 #include "adios2/operator/compress/CompressLibPressio.h"
 #endif
@@ -75,6 +79,8 @@ std::string OperatorTypeToString(const Operator::OperatorType type)
         return "blosc";
     case Operator::COMPRESS_BZIP2:
         return "bzip2";
+    case Operator::COMPRESS_CAESAR:
+        return "caesar";
     case Operator::COMPRESS_LIBPRESSIO:
         return "libpressio";
     case Operator::COMPRESS_MGARD:
@@ -126,6 +132,12 @@ std::shared_ptr<Operator> MakeOperator(const std::string &type, const Params &pa
     {
 #ifdef ADIOS2_HAVE_BZIP2
         ret = std::make_shared<compress::CompressBZIP2>(parameters);
+#endif
+    }
+    else if (typeLowerCase == "caesar")
+    {
+#ifdef ADIOS2_HAVE_CAESAR
+        ret = std::make_shared<compress::CompressCAESAR>(parameters);
 #endif
     }
     else if (typeLowerCase == "libpressio")
