@@ -169,6 +169,7 @@ void WriteCompressionMetaData(char *buffer, size_t &pos, const CompressionMetaDa
   WriteParameter(buffer, pos, meta.global_scale);
   WriteParameter(buffer, pos, meta.global_offset);
   WriteParameter(buffer, pos, meta.pad_T);
+  WriteParameter(buffer, pos, meta.all_filtered);
 }
 
 CompressionMetaData ReadCompressionMetaData(const char *buffer, size_t &pos) {
@@ -182,6 +183,7 @@ CompressionMetaData ReadCompressionMetaData(const char *buffer, size_t &pos) {
   meta.global_scale     = ReadParameter<float>(buffer, pos);
   meta.global_offset    = ReadParameter<float>(buffer, pos);
   meta.pad_T            = ReadParameter<int64_t>(buffer, pos);
+  meta.all_filtered     = ReadParameter<bool>(buffer, pos);
   return meta;
 }
 
