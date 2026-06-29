@@ -10,11 +10,6 @@ namespace adios2 {
 namespace core {
 namespace compress {
 
-std::string DetectDevice() {
-  if (torch::cuda::is_available()) return "cuda";
-  return "cpu";
-}
-
 template <typename T>
 void WriteParameter(char *buffer, size_t &pos, const T &value) {
   std::memcpy(buffer + pos, &value, sizeof(T));
@@ -394,9 +389,7 @@ size_t CompressCAESAR::Operate(const char *dataIn, const Dims &blockStart,
   auto itRelEB = m_Parameters.find("accuracy");
   if (itRelEB != m_Parameters.end()) accuracy = std::stof(itRelEB->second);
 
-  std::string device_str = DetectDevice();
-  auto device = (device_str == "cuda") ? torch::kCUDA : torch::kCPU;
-  config.device = torch::Device(device);
+  torch::Device device = select_model_device();
 
   Compressor compressor(device);
   CompressionResult comp = compressor.compress(config, batch_size, accuracy);
@@ -477,9 +470,7 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
   comp.lbrc_blocks           = ReadLBRCBlocks(bufferIn, bufferInOffset);
   PaddingInfo padding_info   = ReadPaddingInfo(bufferIn, bufferInOffset);
 
-  std::string device_str = DetectDevice();
-  torch::Device device = (device_str == "cuda") ? torch::Device(torch::kCUDA)
-                                                 : torch::Device(torch::kCPU);
+  torch::Device device = select_model_device();
 
   Decompressor decompressor(device);
   torch::Tensor reconstructed = decompressor.decompress(batch_size, n_frame, comp);

@@ -41,8 +41,6 @@ namespace adios2
      * @return : number of bytes in dataOut
      */
                 size_t DecompressV1(const char* bufferIn , const size_t sizeIn , char* dataOut);
-                std::string Detect_device();
-
                 std::string m_VersionInfo;
             };
 
