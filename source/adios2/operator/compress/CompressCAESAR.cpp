@@ -476,7 +476,7 @@ size_t CompressCAESAR::DecompressV1(const char *bufferIn, const size_t sizeIn,
   torch::Tensor reconstructed = decompressor.decompress(batch_size, n_frame, comp);
 
   torch::Tensor restored = restore_from_5d(reconstructed, padding_info);
-  restored = restored.to(torch::kCPU).contiguous();
+  restored = restored.contiguous();
 
   if (type == DataType::Float)
     std::memcpy(dataOut, restored.data_ptr<float>(), sizeOut);
